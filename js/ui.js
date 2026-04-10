@@ -71,7 +71,7 @@ export class UIManager {
     this.$winTitle.textContent    = `🏆 ${winnerName} Wins! 🏆`;
     this.$winSubtitle.textContent = 'Congratulations, champion!';
 
-    this.$finalScores.innerHTML = '';
+    this.$finalScores.replaceChildren();
     players.forEach((pl, i) => {
       const div = document.createElement('div');
       div.className = 'score-row';
@@ -109,7 +109,7 @@ export class UIManager {
 
   _renderPlayerSetup() {
     const n = MODE_INFO[this.selectedMode].players;
-    this.$playerSetup.innerHTML = '';
+    this.$playerSetup.replaceChildren();
 
     for (let i = 0; i < n; i++) {
       const color = DEFAULT_COLORS[i] || PLAYER_COLORS[i].value;
@@ -213,7 +213,7 @@ export class UIManager {
   _updateAvatarPreview(playerIdx, color) {
     const container = document.getElementById(`avatar-prev-${playerIdx}`);
     if (!container) return;
-    container.innerHTML = '';
+    container.replaceChildren();
     const c = document.createElement('canvas');
     c.width  = 40;
     c.height = 40;
@@ -242,7 +242,7 @@ export class UIManager {
   // ═══════════════════════════════════════════════════════════════════════════
 
   updatePlayerList(players, currentPlayer, borneOff, bar) {
-    this.$playerList.innerHTML = '';
+    this.$playerList.replaceChildren();
     players.forEach((pl, i) => {
       const div = document.createElement('div');
       div.className = `player-card ${i === currentPlayer ? 'active' : ''}`;
@@ -266,8 +266,13 @@ export class UIManager {
       nameDiv.textContent = pl.name;             // textContent — safe
 
       const statsDiv = document.createElement('div');
-      statsDiv.className   = 'player-stats';
-      statsDiv.innerHTML   = `<span>✅ ${borneOff[i]}</span><span>🔴 ${bar[i]}</span>`;
+      statsDiv.className = 'player-stats';
+      const borneSpan = document.createElement('span');
+      borneSpan.textContent = `✅ ${Number(borneOff[i])}`;
+      const barSpan = document.createElement('span');
+      barSpan.textContent = `🔴 ${Number(bar[i])}`;
+      statsDiv.appendChild(borneSpan);
+      statsDiv.appendChild(barSpan);
 
       infoDiv.appendChild(nameDiv);
       infoDiv.appendChild(statsDiv);
@@ -288,7 +293,7 @@ export class UIManager {
 
   updateTurnIndicator(playerName, color, phase) {
     const phaseLabel = phase === 'rolling' ? '🎲 Roll dice' : '♟ Choose move';
-    this.$turnIndicator.innerHTML = '';
+    this.$turnIndicator.replaceChildren();
 
     const dot = document.createElement('div');
     dot.className = 'turn-dot';
@@ -312,7 +317,7 @@ export class UIManager {
   }
 
   updateDice(dice, movesLeft) {
-    this.$diceContainer.innerHTML = '';
+    this.$diceContainer.replaceChildren();
     const faces = ['', '⚀','⚁','⚂','⚃','⚄','⚅'];
     const isDoubles = dice.length === 2 && dice[0] === dice[1];
 
@@ -345,7 +350,7 @@ export class UIManager {
   }
 
   updateMoveLog(entries) {
-    this.$logEntries.innerHTML = '';
+    this.$logEntries.replaceChildren();
     entries.slice(0, 10).forEach(e => {
       const div = document.createElement('div');
       div.className   = 'log-entry';
