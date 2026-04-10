@@ -100,14 +100,16 @@ export class UIManager {
       const row   = document.createElement('div');
       row.className   = 'player-row';
       row.dataset.idx = i;
+
+      // Build inner structure without inserting any user-controlled strings
+      // into innerHTML to avoid XSS.
       row.innerHTML = `
         <div class="player-avatar-small" id="avatar-prev-${i}"></div>
         <div class="player-fields">
           <input type="text"
                  class="player-name-input"
                  id="player-name-${i}"
-                 placeholder="Player ${i + 1} name"
-                 value="${this._savedName(i)}">
+                 placeholder="Player ${i + 1} name">
           <button class="btn btn-ghost funny-name-btn" data-idx="${i}" title="Generate funny name">🎲</button>
         </div>
         <div class="color-picker" id="color-picker-${i}">
@@ -122,6 +124,10 @@ export class UIManager {
         <div class="player-color-error" id="color-error-${i}"></div>
       `;
       this.$playerSetup.appendChild(row);
+
+      // Set saved name via DOM property (safe — no HTML parsing)
+      const nameInput = document.getElementById(`player-name-${i}`);
+      if (nameInput) nameInput.value = this._savedName(i);
 
       // Draw avatar preview
       this._updateAvatarPreview(i, color);
@@ -166,7 +172,8 @@ export class UIManager {
         const err = document.getElementById(`color-error-${playerIdx}`);
         if (err) {
           err.textContent = '⚠ Another player already uses that color!';
-          setTimeout(() => { err.textContent = ''; }, 2400);
+          clearTimeout(err._timer);
+          err._timer = setTimeout(() => { err.textContent = ''; }, 2400);
         }
         return;
       }

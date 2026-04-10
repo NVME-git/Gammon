@@ -232,7 +232,7 @@ export class BoardRenderer {
     }
 
     // ── Highlights ────────────────────────────────────────────────────────────
-    this._drawLinearHighlights(state, leftEnd, PW, barX, BAR_W, CY, TH, BOARD_H, boardY, theme);
+    this._drawLinearHighlights(state, leftEnd, PW, barX, BAR_W, CY, TH, BOARD_H, boardY, bearR_x, bearL_x, BEAR_W, theme);
   }
 
   _drawBearoffZoneLinear(x, y, w, h, player, side, theme) {
@@ -261,7 +261,7 @@ export class BoardRenderer {
     }
   }
 
-  _drawLinearHighlights(state, leftEnd, PW, barX, BAR_W, CY, TH, BOARD_H, boardY, theme) {
+  _drawLinearHighlights(state, leftEnd, PW, barX, BAR_W, CY, TH, BOARD_H, boardY, bearR_x, bearL_x, BEAR_W, theme) {
     const ctx = this.ctx;
 
     // Highlight selected point
@@ -281,9 +281,12 @@ export class BoardRenderer {
     // Highlight valid moves
     for (const vm of state.validMoves) {
       if (vm === 'bearoff') {
-        // Both bearing-off zones
+        // Highlight the bearing-off zone for the current player.
+        // P0 bears off to the right end; P1 bears off to the left end.
+        const bearoffX = this.game.currentPlayer === 0 ? bearR_x : bearL_x;
+        const bearoffW = BEAR_W;
         ctx.fillStyle = theme.validMove;
-        ctx.fillRect(barX + BAR_W, boardY, leftEnd + PW * 24 + BAR_W - (barX + BAR_W), BOARD_H / 8);
+        ctx.fillRect(bearoffX, boardY, bearoffW, BOARD_H);
         continue;
       }
       const col = vm < 12 ? vm : vm + 1;

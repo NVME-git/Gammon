@@ -9,6 +9,9 @@ let game     = null;
 let renderer = null;
 let canvas   = null;
 
+// Named delay constant for the "no moves" forfeit message
+const FORFEIT_MESSAGE_DELAY_MS = 800;
+
 // ─── Boot ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   ui     = new UIManager();
@@ -84,7 +87,7 @@ function handleRoll() {
 
   if (result.forfeit) {
     ui.setRollButtonState(false, 'No moves!');
-    setTimeout(refreshUI, 800);
+    setTimeout(refreshUI, FORFEIT_MESSAGE_DELAY_MS);
   }
 
   // Unigammon tutorial hints
