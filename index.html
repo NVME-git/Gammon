@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gammon – Multi-Player Backgammon</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ── Global controls ─────────────────────────────────────────────── -->
+  <button id="theme-toggle"  class="icon-btn theme-btn"   title="Toggle theme">🌙</button>
+  <button id="settings-btn"  class="icon-btn settings-btn" title="Settings">⚙️</button>
+
+  <div id="settings-panel" class="settings-panel hidden">
+    <h3>Settings</h3>
+    <label class="setting-row">
+      <span>Elimination animations</span>
+      <input type="checkbox" id="anim-toggle" checked>
+    </label>
+    <label class="setting-row">
+      <span>Sound (visual only)</span>
+      <input type="checkbox" id="sound-toggle">
+    </label>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       SETUP SCREEN
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="setup-screen" class="screen active">
+    <div class="setup-container">
+
+      <h1 class="game-title">🎲 GAMMON 🎲</h1>
+      <p  class="subtitle">The Ultimate Multi-Player Backgammon Experience</p>
+
+      <!-- Mode selection -->
+      <section class="setup-section">
+        <h2 class="section-label">Choose Your Game Mode</h2>
+        <div class="mode-cards">
+
+          <div class="mode-card" data-mode="unigammon">
+            <div class="mode-icon">👤</div>
+            <h3>Unigammon</h3>
+            <p>Tutorial – move all 15 pieces from left to right and bear them off!</p>
+            <span class="badge badge-1p">1 Player</span>
+          </div>
+
+          <div class="mode-card selected" data-mode="bigammon">
+            <div class="mode-icon">⚔️</div>
+            <h3>Bigammon</h3>
+            <p>Classic 2-player backgammon on a linear board. No U-turn!</p>
+            <span class="badge badge-2p">2 Players</span>
+          </div>
+
+          <div class="mode-card" data-mode="trigammon">
+            <div class="mode-icon">🔺</div>
+            <h3>Trigammon</h3>
+            <p>3 players battle it out on a triangular board. Move clockwise!</p>
+            <span class="badge badge-3p">3 Players</span>
+          </div>
+
+          <div class="mode-card" data-mode="quadgammon">
+            <div class="mode-icon">✚</div>
+            <h3>Quadgammon</h3>
+            <p>4-way mayhem on a cross-shaped board. Last one standing wins!</p>
+            <span class="badge badge-4p">4 Players</span>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Player setup -->
+      <section class="setup-section">
+        <h2 class="section-label">Players</h2>
+        <div id="player-setup" class="player-setup">
+          <!-- dynamically populated -->
+        </div>
+      </section>
+
+      <button id="start-btn" class="btn btn-primary btn-xl">
+        🎲 Start Game!
+      </button>
+
+    </div><!-- /setup-container -->
+  </div><!-- /setup-screen -->
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       GAME SCREEN
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="game-screen" class="screen">
+    <div class="game-layout">
+
+      <!-- Left panel -->
+      <aside class="side-panel left-panel">
+        <button id="back-btn" class="btn btn-secondary btn-sm">← Menu</button>
+
+        <div id="player-list" class="player-list"></div>
+
+        <div class="dice-area">
+          <div id="dice-container" class="dice-container"></div>
+          <button id="roll-btn" class="btn btn-primary" disabled>🎲 Roll</button>
+        </div>
+      </aside>
+
+      <!-- Canvas -->
+      <div class="canvas-wrapper">
+        <canvas id="game-canvas"></canvas>
+      </div>
+
+      <!-- Right panel -->
+      <aside class="side-panel right-panel">
+        <div id="turn-indicator" class="turn-indicator">
+          <div class="turn-dot"></div>
+          <div>
+            <div class="turn-name">–</div>
+            <div class="turn-phase">Waiting…</div>
+          </div>
+        </div>
+
+        <div class="move-log">
+          <h4>Move Log</h4>
+          <div id="log-entries" class="log-entries"></div>
+        </div>
+      </aside>
+
+    </div><!-- /game-layout -->
+  </div><!-- /game-screen -->
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       WIN SCREEN OVERLAY
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="win-screen" class="overlay hidden">
+    <div class="win-card">
+      <div class="win-animation">🏆</div>
+      <h1 id="win-title">Player Wins!</h1>
+      <p  id="win-subtitle">Congratulations!</p>
+      <div id="final-scores" class="final-scores"></div>
+      <div class="win-buttons">
+        <button id="play-again-btn" class="btn btn-primary">🔄 Play Again</button>
+        <button id="main-menu-btn"  class="btn btn-secondary">🏠 Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       ELIMINATION ANIMATION OVERLAY
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="animation-overlay" class="overlay hidden anim-overlay">
+    <canvas id="animation-canvas" width="560" height="320"></canvas>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
