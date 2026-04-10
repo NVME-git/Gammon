@@ -418,7 +418,7 @@ export class BoardRenderer {
       }
     }
 
-    // Bearing-off labels at vertices
+    // Bearing-off labels at vertices (and register hit areas)
     for (let p = 0; p < this.game.numPlayers; p++) {
       const homeVertex = verts[p];
       const count      = state.borneOff[p];
@@ -427,10 +427,13 @@ export class BoardRenderer {
       ctx.font         = 'bold 12px Arial';
       ctx.textAlign    = 'center';
       ctx.fillText(`P${p + 1} off: ${count}`, homeVertex.x, homeVertex.y - 16);
+
+      // Register bear-off click area near vertex
+      this._bearAreas.push({ x: homeVertex.x - 36, y: homeVertex.y - 30, w: 72, h: 28 });
     }
 
     // Highlights
-    this._drawPolyHighlights(state, pts, PR, theme, cx, cy);
+    this._drawPolyHighlights(state, pts, PR, theme, cx, cy, verts);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -567,6 +570,7 @@ export class BoardRenderer {
 
     // Bearing-off labels at arm tips
     const tipDist = armLen + armW * 0.7;
+    const bearTips = [];
     for (let p = 0; p < this.game.numPlayers; p++) {
       const { dx, dy } = armDefs[p];
       const tx   = cx + dx * tipDist;
@@ -579,18 +583,21 @@ export class BoardRenderer {
 
       // Bear-off area registration
       this._bearAreas.push({ x: tx - 28, y: ty - 16, w: 56, h: 20 });
+      bearTips.push({ tx, ty });
     }
 
     // Highlights
-    this._drawPolyHighlights(state, pts, PR, theme, cx, cy);
+    this._drawPolyHighlights(state, pts, PR, theme, cx, cy, null, bearTips, armDefs, armW);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ─── Shared helpers ───────────────────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════════════════════
 
-  _drawPolyHighlights(state, pts, PR, theme, boardCX, boardCY) {
+  _drawPolyHighlights(state, pts, PR, theme, boardCX, boardCY, triVerts = null, quadTips = null) {
     const ctx = this.ctx;
+    const p   = state.currentPlayer;
+
     // Selected
     if (state.selectedPoint !== null && state.selectedPoint !== 'bar') {
       for (const pt of pts) {
@@ -602,9 +609,29 @@ export class BoardRenderer {
         }
       }
     }
+
     // Valid moves
     for (const vm of state.validMoves) {
-      if (vm === 'bearoff') continue;
+      if (vm === 'bearoff') {
+        // Highlight the current player's bear-off zone
+        if (triVerts) {
+          const v = triVerts[p];
+          ctx.fillStyle = theme.validMove;
+          ctx.beginPath();
+          ctx.arc(v.x, v.y, PR * 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        if (quadTips) {
+          const tip = quadTips[p];
+          if (tip) {
+            ctx.fillStyle = theme.validMove;
+            ctx.beginPath();
+            ctx.arc(tip.tx, tip.ty, PR * 2.2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        continue;
+      }
       for (const pt of pts) {
         if (pt.idx === vm) {
           ctx.fillStyle = theme.validMove;
