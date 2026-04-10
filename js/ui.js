@@ -72,9 +72,22 @@ export class UIManager {
     players.forEach((pl, i) => {
       const div = document.createElement('div');
       div.className = 'score-row';
-      div.innerHTML = `<span class="score-color" style="background:${pl.color}"></span>
-                       <span class="score-name">${pl.name}</span>
-                       <span class="score-val">${scores[i]} borne off</span>`;
+
+      const colorDot = document.createElement('span');
+      colorDot.className = 'score-color';
+      colorDot.style.background = pl.color;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className   = 'score-name';
+      nameSpan.textContent = pl.name;          // textContent — safe
+
+      const valSpan = document.createElement('span');
+      valSpan.className   = 'score-val';
+      valSpan.textContent = `${scores[i]} borne off`;
+
+      div.appendChild(colorDot);
+      div.appendChild(nameSpan);
+      div.appendChild(valSpan);
       this.$finalScores.appendChild(div);
     });
 
@@ -233,31 +246,63 @@ export class UIManager {
       avatarC.height = 36;
       PixelArt.drawCharacter(avatarC, pl.color);
 
-      div.innerHTML = `
-        <div class="player-avatar-wrap" style="border-color:${pl.color}"></div>
-        <div class="player-info">
-          <div class="player-name">${pl.name}</div>
-          <div class="player-stats">
-            <span>✅ ${borneOff[i]}</span>
-            <span>🔴 ${bar[i]}</span>
-          </div>
-        </div>
-        ${i === currentPlayer ? '<div class="turn-arrow">▶</div>' : ''}
-      `;
-      div.querySelector('.player-avatar-wrap').appendChild(avatarC);
+      // Build structure without putting user-controlled strings in innerHTML
+      const avatarWrap = document.createElement('div');
+      avatarWrap.className = 'player-avatar-wrap';
+      avatarWrap.style.borderColor = pl.color;
+      avatarWrap.appendChild(avatarC);
+
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'player-info';
+
+      const nameDiv = document.createElement('div');
+      nameDiv.className   = 'player-name';
+      nameDiv.textContent = pl.name;             // textContent — safe
+
+      const statsDiv = document.createElement('div');
+      statsDiv.className   = 'player-stats';
+      statsDiv.innerHTML   = `<span>✅ ${borneOff[i]}</span><span>🔴 ${bar[i]}</span>`;
+
+      infoDiv.appendChild(nameDiv);
+      infoDiv.appendChild(statsDiv);
+
+      div.appendChild(avatarWrap);
+      div.appendChild(infoDiv);
+
+      if (i === currentPlayer) {
+        const arrow = document.createElement('div');
+        arrow.className   = 'turn-arrow';
+        arrow.textContent = '▶';
+        div.appendChild(arrow);
+      }
+
       this.$playerList.appendChild(div);
     });
   }
 
   updateTurnIndicator(playerName, color, phase) {
     const phaseLabel = phase === 'rolling' ? '🎲 Roll dice' : '♟ Choose move';
-    this.$turnIndicator.innerHTML = `
-      <div class="turn-dot" style="background:${color}"></div>
-      <div>
-        <div class="turn-name">${playerName}</div>
-        <div class="turn-phase">${phaseLabel}</div>
-      </div>
-    `;
+    this.$turnIndicator.innerHTML = '';
+
+    const dot = document.createElement('div');
+    dot.className = 'turn-dot';
+    dot.style.background = color;
+
+    const info = document.createElement('div');
+
+    const nameDiv = document.createElement('div');
+    nameDiv.className   = 'turn-name';
+    nameDiv.textContent = playerName;        // textContent — safe
+
+    const phaseDiv = document.createElement('div');
+    phaseDiv.className   = 'turn-phase';
+    phaseDiv.textContent = phaseLabel;
+
+    info.appendChild(nameDiv);
+    info.appendChild(phaseDiv);
+
+    this.$turnIndicator.appendChild(dot);
+    this.$turnIndicator.appendChild(info);
   }
 
   updateDice(dice, movesLeft) {
