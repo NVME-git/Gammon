@@ -41,6 +41,9 @@ export class UIManager {
     this.selectedMode  = 'bigammon';
     this._settingsOpen = false;
 
+    // Keyed by player index — stores timeout IDs for color-error messages
+    this._colorErrTimers = new Map();
+
     this._loadSettings();
     this._bindStaticEvents();
     this._renderModeCards();
@@ -185,8 +188,11 @@ export class UIManager {
         const err = document.getElementById(`color-error-${playerIdx}`);
         if (err) {
           err.textContent = '⚠ Another player already uses that color!';
-          clearTimeout(err._timer);
-          err._timer = setTimeout(() => { err.textContent = ''; }, 2400);
+          clearTimeout(this._colorErrTimers.get(playerIdx));
+          this._colorErrTimers.set(playerIdx, setTimeout(() => {
+            err.textContent = '';
+            this._colorErrTimers.delete(playerIdx);
+          }, 2400));
         }
         return;
       }
