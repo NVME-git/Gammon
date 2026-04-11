@@ -32,8 +32,9 @@ export class BackgammonGame {
     this.players     = players;
     this.settings    = settings;
     this.numPlayers  = players.length;
+    this.numPoints   = (mode === 'trigammon') ? 36 : 24;
 
-    this.points   = Array.from({ length: NUM_POINTS }, () => ({ count: 0, player: -1 }));
+    this.points   = Array.from({ length: this.numPoints }, () => ({ count: 0, player: -1 }));
     this.bar      = new Array(this.numPlayers).fill(0);
     this.borneOff = new Array(this.numPlayers).fill(0);
 
@@ -90,7 +91,28 @@ export class BackgammonGame {
       return;
     }
 
-    // 3-player (offset=8) and 4-player (offset=6)
+    if (mode === 'trigammon') {
+      // 36-point T-board.  Each player uses the same virtual starting layout
+      // (v=23→2, v=12→5, v=7→3, v=5→5) mapped to their physical positions.
+      // P0 (Blue): virtual = physical (main board, left→right)
+      this._set(0, 23, 2);  // v=23
+      this._set(0, 12, 5);  // v=12
+      this._set(0,  7, 3);  // v=7
+      this._set(0,  5, 5);  // v=5
+      // P1 (Red): v≤11 → 35-v (arm), v>11 → 23-v (main-left)
+      this._set(1,  0, 2);  // v=23 → 23-23=0
+      this._set(1, 11, 5);  // v=12 → 23-12=11
+      this._set(1, 28, 3);  // v=7  → 35-7=28
+      this._set(1, 30, 5);  // v=5  → 35-5=30
+      // P2 (Green): v≤11 → 23-v (main-right), v>11 → v+12 (arm)
+      this._set(2, 35, 2);  // v=23 → 23+12=35
+      this._set(2, 24, 5);  // v=12 → 12+12=24
+      this._set(2, 16, 3);  // v=7  → 23-7=16
+      this._set(2, 18, 5);  // v=5  → 23-5=18
+      return;
+    }
+
+    // 4-player (offset=6)
     const offset = Math.floor(NUM_POINTS / N);
     for (let p = 0; p < N; p++) {
       const o = p * offset;
@@ -110,6 +132,12 @@ export class BackgammonGame {
   // ═══════════════════════════════════════════════════════════════════════════
 
   getActualPos(player, virtual) {
+    if (this.mode === 'trigammon') {
+      if (player === 0) return virtual;
+      if (player === 1) return virtual <= 11 ? 35 - virtual : 23 - virtual;
+      // player === 2: v 0-11 → 23-v (main-right), v 12-23 → v+12 (arm)
+      return virtual <= 11 ? 23 - virtual : virtual + 12;
+    }
     if (this.numPlayers <= 2 && player === 0) return virtual;
     if (this.numPlayers === 2 && player === 1) return 23 - virtual;
     const offset = player * Math.floor(NUM_POINTS / this.numPlayers);
@@ -117,6 +145,12 @@ export class BackgammonGame {
   }
 
   getVirtualPos(player, actual) {
+    if (this.mode === 'trigammon') {
+      if (player === 0) return actual;
+      if (player === 1) return actual >= 24 ? 35 - actual : 23 - actual;
+      // player === 2: arm (24-35) → a-12, main-right (12-23) → 23-a
+      return actual >= 24 ? actual - 12 : 23 - actual;
+    }
     if (this.numPlayers <= 2 && player === 0) return actual;
     if (this.numPlayers === 2 && player === 1) return 23 - actual;
     const offset = player * Math.floor(NUM_POINTS / this.numPlayers);
@@ -218,7 +252,7 @@ export class BackgammonGame {
 
   canBearOff(player) {
     if (this.bar[player] > 0) return false;
-    for (let a = 0; a < 24; a++) {
+    for (let a = 0; a < this.numPoints; a++) {
       const pt = this.points[a];
       if (pt.player === player && pt.count > 0) {
         if (this.getVirtualPos(player, a) < 18) return false;
@@ -228,7 +262,7 @@ export class BackgammonGame {
   }
 
   _isHighestChecker(player, vPos) {
-    for (let a = 0; a < 24; a++) {
+    for (let a = 0; a < this.numPoints; a++) {
       const pt = this.points[a];
       if (pt.player === player && pt.count > 0) {
         if (this.getVirtualPos(player, a) > vPos) return false;
@@ -244,7 +278,7 @@ export class BackgammonGame {
   _hasAnyMoves() {
     const p = this.currentPlayer;
     if (this.bar[p] > 0) return this._barEntryMoves(p).length > 0;
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < this.numPoints; i++) {
       if (this.points[i].player === p && this.points[i].count > 0) {
         if (this.getValidMoves(i).length > 0) return true;
       }
@@ -402,7 +436,7 @@ export class BackgammonGame {
 
   getPipCount(player) {
     let pips = 0;
-    for (let a = 0; a < 24; a++) {
+    for (let a = 0; a < this.numPoints; a++) {
       const pt = this.points[a];
       if (pt.player === player && pt.count > 0) {
         const v = this.getVirtualPos(player, a);

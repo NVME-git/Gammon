@@ -534,6 +534,16 @@ export class BoardRenderer {
   // ─── TRIANGULAR BOARD (Trigammon) ────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * T-shaped board for Trigammon (36 points):
+   *   Physical 0–23  → main horizontal track (bottom section)
+   *   Physical 24–35 → arm column (top section, 24 = junction, 35 = tip)
+   *
+   * Player paths (virtual 0→23, then bear off):
+   *   P0 Blue  : main left→right (phy 0→23),  bears off past 23
+   *   P1 Red   : arm tip→junction (35→24) then main right→left (11→0), bears off past 0
+   *   P2 Green : main right→left (23→12) then arm up (24→35), bears off past 35
+   */
   _renderTriangle() {
     const ctx   = this.ctx;
     const W     = this.canvas.width;
@@ -542,164 +552,274 @@ export class BoardRenderer {
     const game  = this.game;
     const state = game.getState();
 
-    const HUD_H = Math.min(64, H * 0.14);
+    const HUD_H  = Math.min(64, H * 0.14);
     const boardH = H - HUD_H;
+    const PAD    = 10;
 
-    const cx = W / 2;
-    const cy = boardH / 2;
-    const R  = Math.min(W, boardH) * 0.40;
+    // ── Layout split ─────────────────────────────────────────────────────────
+    // Top 52% of boardH: arm section (12 points, vertical column)
+    // Bottom 48%: main board (24 points, horizontal)
+    const ARM_FRAC  = 0.52;
+    const armAreaH  = boardH * ARM_FRAC;
+    const mainAreaH = boardH - armAreaH;
+    const mainStartY = armAreaH;
 
-    // Triangle vertices (equilateral, flat-bottom)
-    const verts = [
-      { x: cx,                                          y: cy - R },
-      { x: cx + R * Math.sin(Math.PI * 2 / 3),  y: cy - R * Math.cos(Math.PI * 2 / 3) },
-      { x: cx + R * Math.sin(Math.PI * 4 / 3),  y: cy - R * Math.cos(Math.PI * 4 / 3) },
-    ];
+    // ── Main board geometry (like bigammon linear board) ──────────────────────
+    const CY          = mainStartY + mainAreaH / 2;
+    const PW          = (W - PAD * 2) / 24;
+    const TH          = Math.min(mainAreaH * 0.36, PW * 1.1);
+    const boardStartX = PAD;
+    const boardEndX   = W - PAD;
+    const pp          = i => boardStartX + i * PW;
 
-    // Board background
+    const topStripH    = CY - TH - mainStartY;
+    const bottomStripH = mainStartY + mainAreaH - (CY + TH);
+    const numFontH     = Math.max(7, Math.floor(PW * 0.28));
+    const numGap       = numFontH + 5;
+    const ZW           = Math.min(72, topStripH * 1.05, bottomStripH * 1.05);
+
+    // ── Arm geometry ──────────────────────────────────────────────────────────
+    // Arm column is centered at W/2, between the two halves of the main board.
+    // Physical 24 is at the bottom of the arm (junction), 35 at the top (tip).
+    const armCX    = W / 2;
+    // Reserve space at top for P1-BAR and P2-OFF zone boxes
+    const TIP_ZONE    = Math.min(38, armAreaH * 0.14);
+    const armSlotAreaH = armAreaH - TIP_ZONE - PAD;
+    const armSlotH    = armSlotAreaH / 12;
+    // Arm diamonds: tall orientation (wide horizontal, narrower vertical)
+    // ARM_HW = horizontal half-width (constrained to stay within arm column)
+    // ARM_HH = vertical half-height (constrained to armSlotH so they don't overlap)
+    const ARM_HW   = Math.min(PW * 0.44, 18);
+    const ARM_HH   = armSlotH * 0.44;
+    const ARM_CR   = Math.min(ARM_HW * 0.55, 9);             // checker radius
+
+    // y-centre of arm point with given physical index (24..35)
+    const armPtY = physIdx => {
+      const slot  = physIdx - 24;   // 0 = phy24 (junction, bottom), 11 = phy35 (tip, top)
+      // slot 0 at bottom of slot area, slot 11 at top
+      return (mainStartY - TIP_ZONE) - (slot + 0.5) * armSlotH;
+    };
+
+    // ── Board backgrounds ─────────────────────────────────────────────────────
+    // Main board
     ctx.fillStyle = theme.board;
     ctx.beginPath();
-    ctx.moveTo(verts[0].x, verts[0].y);
-    ctx.lineTo(verts[1].x, verts[1].y);
-    ctx.lineTo(verts[2].x, verts[2].y);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = theme.boardBorder;
-    ctx.lineWidth   = 3;
-    ctx.stroke();
-
-    // Centre bar circle — shows per-player BAR counts
-    const barR = R * 0.18;
-    ctx.fillStyle = theme.barArea;
-    ctx.beginPath();
-    ctx.arc(cx, cy, barR, 0, Math.PI * 2);
+    ctx.roundRect(PAD, mainStartY, W - PAD * 2, mainAreaH, 12);
     ctx.fill();
     ctx.strokeStyle = theme.boardBorder;
     ctx.lineWidth   = 2;
     ctx.stroke();
-    ctx.fillStyle    = theme.subtext || '#888';
-    ctx.font         = 'bold 9px Arial';
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('BAR', cx, cy);
-    ctx.textBaseline = 'alphabetic';
-    this._barAreas.push({ x: cx - barR, y: cy - barR, w: barR * 2, h: barR * 2 });
 
-    // Compute 24 point positions — 8 per side
-    const MARGIN  = 0.12;
-    const SPACING = (1 - 2 * MARGIN) / 7;
-    const pts     = [];
+    // Arm column background (sits between tip-zone and main board)
+    const armBgW   = ARM_HW * 2 + 14;
+    const armBgY   = PAD + TIP_ZONE;
+    const armBgH   = mainStartY - armBgY;
+    ctx.fillStyle  = theme.board;
+    ctx.beginPath();
+    ctx.roundRect(armCX - armBgW / 2, armBgY, armBgW, armBgH, [8, 8, 0, 0]);
+    ctx.fill();
+    ctx.strokeStyle = theme.boardBorder;
+    ctx.lineWidth   = 1.5;
+    ctx.stroke();
 
-    for (let side = 0; side < 3; side++) {
-      const vA = verts[side];
-      const vB = verts[(side + 1) % 3];
-      for (let i = 0; i < 8; i++) {
-        const t  = MARGIN + i * SPACING;
-        pts.push({
-          cx:  vA.x + (vB.x - vA.x) * t,
-          cy:  vA.y + (vB.y - vA.y) * t,
-          idx: side * 8 + i,
-        });
-      }
-    }
+    // ── 24 main board diamond points ──────────────────────────────────────────
+    const dColors = [theme.triangle1, theme.triangle2];
+    for (let i = 0; i < 24; i++) {
+      const px  = pp(i);
+      const pcx = px + PW / 2;
+      const col = dColors[i % 2];
 
-    const PR = Math.min(W, boardH) * 0.036;
-
-    // Point shapes
-    const colors = [theme.triangle1, theme.triangle2];
-    for (const pt of pts) {
-      const color = colors[Math.floor(pt.idx / 4) % 2];
-      const angle = Math.atan2(cy - pt.cy, cx - pt.cx);
-      const len   = PR * 2.6;
-      ctx.fillStyle = color;
+      ctx.fillStyle = col;
       ctx.beginPath();
-      ctx.moveTo(pt.cx + PR * Math.cos(angle - 1.3), pt.cy + PR * Math.sin(angle - 1.3));
-      ctx.lineTo(pt.cx + PR * Math.cos(angle + 1.3), pt.cy + PR * Math.sin(angle + 1.3));
-      ctx.lineTo(pt.cx + len * Math.cos(angle),       pt.cy + len * Math.sin(angle));
+      ctx.moveTo(pcx,     CY - TH);
+      ctx.lineTo(px + PW, CY);
+      ctx.lineTo(pcx,     CY + TH);
+      ctx.lineTo(px,      CY);
       ctx.closePath();
       ctx.fill();
 
-      ctx.fillStyle    = 'rgba(255,255,255,0.4)';
-      ctx.font         = `bold ${Math.floor(PR * 0.85)}px Arial`;
+      ctx.fillStyle    = 'rgba(255,255,255,0.82)';
+      ctx.font         = `bold ${numFontH}px Arial`;
       ctx.textAlign    = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(pt.idx + 1, pt.cx, pt.cy);
-      ctx.textBaseline = 'alphabetic';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(i + 1, pcx, CY - TH - 4);
+      ctx.textBaseline = 'top';
+      ctx.fillText(i + 1, pcx, CY + TH + 4);
 
-      this._pointCenters.push({ cx: pt.cx, cy: pt.cy, r: PR * 1.8, idx: pt.idx });
+      this._pointAreas.push({ x: px, y: mainStartY, w: PW, h: mainAreaH, idx: i });
     }
 
-    // Checkers on points
-    for (const pt of pts) {
-      const sp = state.points[pt.idx];
-      if (sp.count === 0) continue;
-      const angle = Math.atan2(cy - pt.cy, cx - pt.cx);
-      for (let s = 0; s < sp.count; s++) {
-        const dist = PR * 1.8 + s * (PR * 2 + 2);
-        this._drawChecker(
-          pt.cx + dist * Math.cos(angle),
-          pt.cy + dist * Math.sin(angle),
-          PR, sp.player, s, sp.count, theme
-        );
+    // ── 12 arm diamond points (horizontal diamonds stacked vertically) ─────────
+    for (let physIdx = 24; physIdx <= 35; physIdx++) {
+      const acy = armPtY(physIdx);
+      const col = dColors[(physIdx % 4 < 2) ? 0 : 1];
+
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(armCX,          acy - ARM_HH);   // top tip
+      ctx.lineTo(armCX + ARM_HW, acy);             // right
+      ctx.lineTo(armCX,          acy + ARM_HH);   // bottom tip
+      ctx.lineTo(armCX - ARM_HW, acy);             // left
+      ctx.closePath();
+      ctx.fill();
+
+      // Point number to the right of the diamond
+      const labelSize = Math.max(7, Math.floor(ARM_HW * 0.52));
+      ctx.fillStyle    = 'rgba(255,255,255,0.82)';
+      ctx.font         = `bold ${labelSize}px Arial`;
+      ctx.textAlign    = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(physIdx + 1, armCX + ARM_HW + 4, acy);
+      ctx.textBaseline = 'alphabetic';
+
+      this._pointCenters.push({ cx: armCX, cy: acy, r: Math.max(ARM_HW, ARM_HH) * 1.3, idx: physIdx });
+    }
+
+    // ── Checkers on main board ────────────────────────────────────────────────
+    const CR = Math.min(PW / 2 - 2, 14);
+    for (let i = 0; i < 24; i++) {
+      const pt = state.points[i];
+      if (pt.count === 0) continue;
+      const pcx = pp(i) + PW / 2;
+      for (let s = 0; s < pt.count; s++) {
+        const offset = (s - (pt.count - 1) / 2) * (CR * 2 + 1);
+        this._drawChecker(pcx, CY + offset, CR, pt.player, s, pt.count, theme);
       }
     }
 
-    // Bar checkers — radiate outward from centre, one direction per player
-    for (let p = 0; p < game.numPlayers; p++) {
+    // ── Checkers on arm ───────────────────────────────────────────────────────
+    for (let physIdx = 24; physIdx <= 35; physIdx++) {
+      const pt = state.points[physIdx];
+      if (pt.count === 0) continue;
+      const acy = armPtY(physIdx);
+      for (let s = 0; s < pt.count; s++) {
+        // Stack horizontally to the left of the arm centre
+        const ox = -(s + 0.5) * (ARM_CR * 2 + 1.5);
+        this._drawChecker(armCX + ox, acy, ARM_CR, pt.player, s, pt.count, theme);
+      }
+    }
+
+    // ── Zone boxes ────────────────────────────────────────────────────────────
+    // P0 (Blue) bottom strip — BAR at left, OFF at right
+    const botZoneY  = CY + TH + numGap;
+    const botZoneH  = bottomStripH - numGap;
+    const topZoneH  = topStripH - numGap;
+    // Top strip of main board (above diamonds) — P1 OFF (left), P2 BAR (right)
+    const topZoneY  = mainStartY;
+
+    // Arm-tip zone row (above arm top)
+    const tipZoneY  = PAD;
+    const tipZoneH  = TIP_ZONE - 2;
+    const tipZoneW  = Math.min(W * 0.28, 130);
+
+    const allZones = [
+      // P0 bottom strip
+      { player: 0, type: 'bar', x: boardStartX,            y: botZoneY,  w: ZW,        h: botZoneH },
+      { player: 0, type: 'off', x: boardEndX - ZW,         y: botZoneY,  w: ZW,        h: botZoneH },
+      // P1 top strip (left of arm) — OFF here (bear-off at phy 0, left side)
+      { player: 1, type: 'off', x: boardStartX,            y: topZoneY,  w: ZW,        h: topZoneH },
+      // P2 top strip (right of arm) — BAR here (entry at phy 23, right side)
+      { player: 2, type: 'bar', x: boardEndX - ZW,         y: topZoneY,  w: ZW,        h: topZoneH },
+      // P1 BAR at arm tip (top-left)
+      { player: 1, type: 'bar', x: armCX - tipZoneW - 2,   y: tipZoneY,  w: tipZoneW,  h: tipZoneH },
+      // P2 OFF at arm tip (top-right)
+      { player: 2, type: 'off', x: armCX + 2,              y: tipZoneY,  w: tipZoneW,  h: tipZoneH },
+    ];
+
+    for (const zone of allZones) {
+      const pl    = game.players[zone.player];
+      const count = zone.type === 'bar' ? state.bar[zone.player] : state.borneOff[zone.player];
+      this._drawZoneBox(ctx, zone, count, pl.name, pl.color, theme);
+      if (zone.type === 'bar') {
+        this._barAreas.push({ x: zone.x, y: zone.y, w: zone.w, h: zone.h });
+      } else {
+        this._bearAreas.push({ x: zone.x, y: zone.y, w: zone.w, h: zone.h });
+      }
+    }
+
+    // Bar checkers: shown as small dots inside the arm column, near junction
+    for (let p = 0; p < 3; p++) {
       const count = state.bar[p];
       if (count === 0) continue;
-      const angle = (p / game.numPlayers) * Math.PI * 2 - Math.PI / 2;
+      const barDisplayY = mainStartY - armSlotH * 0.5 + p * (ARM_CR * 2.5 + 2) - ARM_CR * 2;
       for (let s = 0; s < count; s++) {
-        const dist = barR * 0.5 + s * (PR * 2 + 2);
-        this._drawChecker(
-          cx + dist * Math.cos(angle),
-          cy + dist * Math.sin(angle),
-          PR * 0.75, p, s, count, theme
-        );
+        this._drawChecker(armCX - ARM_HW * 0.6 + s * (ARM_CR * 2.2 + 1), barDisplayY,
+                          ARM_CR * 0.85, p, s, count, theme);
       }
     }
 
-    // Bear-off zones at each vertex — coloured pill with player name + count
-    const bearZoneW = Math.min(84, R * 0.55);
-    const bearZoneH = Math.min(32, R * 0.22);
-    for (let p = 0; p < game.numPlayers; p++) {
-      const v     = verts[p];
-      const color = game.players[p].color;
-      const name  = game.players[p].name;
-      const count = state.borneOff[p];
-      // Push zone outward from vertex away from centre
-      const outAngle = Math.atan2(v.y - cy, v.x - cx);
-      const zx = v.x + Math.cos(outAngle) * (R * 0.12) - bearZoneW / 2;
-      const zy = v.y + Math.sin(outAngle) * (R * 0.12) - bearZoneH / 2;
+    // ── Direction chevrons on main board ──────────────────────────────────────
+    // P0 (Blue) bottom strip — rightward
+    // P1 (Red) top strip — leftward (they travel right→left on main)
+    const chevH    = Math.min(topZoneH * 0.5, 16);
+    const chevW    = chevH * 0.7;
+    const mainW    = boardEndX - boardStartX;
+    const spacing  = Math.max(32, mainW / 20);
+    const chevCnt  = Math.floor(mainW / spacing);
+    const chevOff  = (mainW - (chevCnt - 1) * spacing) / 2;
+    const botStripCY = (CY + TH) + bottomStripH / 2;
+    const topStripCY = mainStartY + topStripH / 2;
 
-      ctx.fillStyle = color + '28';
-      ctx.beginPath();
-      ctx.roundRect(zx, zy, bearZoneW, bearZoneH, bearZoneH / 2);
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.lineWidth   = 1.5;
-      ctx.globalAlpha = 0.6;
-      ctx.beginPath();
-      ctx.roundRect(zx, zy, bearZoneW, bearZoneH, bearZoneH / 2);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-
-      const short = name.length > 7 ? name.slice(0, 6) + '…' : name;
-      ctx.fillStyle    = color;
-      ctx.font         = `bold ${Math.max(8, bearZoneH * 0.32)}px Arial`;
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`${short}  OFF ×${count}`, zx + bearZoneW / 2, zy + bearZoneH / 2);
-      ctx.textBaseline = 'alphabetic';
-
-      this._bearAreas.push({ x: zx, y: zy, w: bearZoneW, h: bearZoneH });
+    for (let i = 0; i < chevCnt; i++) {
+      const x = boardStartX + chevOff + i * spacing;
+      this._drawOneChevron(ctx, x, botStripCY, chevW, chevH, true,  game.players[0].color, 0.20);
+      this._drawOneChevron(ctx, x, topStripCY, chevW, chevH, false, game.players[1].color, 0.20);
     }
 
-    // Highlights
-    this._drawPolyHighlights(state, pts, PR, theme, cx, cy, verts);
+    // ── Highlights ────────────────────────────────────────────────────────────
+    this._drawTrigammonHighlights(state, pp, PW, mainStartY, mainAreaH, armPtY, ARM_HW, ARM_HH, allZones, theme);
 
-    // HUD: dice + roll button
+    // ── Dice + roll button HUD ────────────────────────────────────────────────
     this._drawPolyHUD(state, W, H, HUD_H);
+  }
+
+  _drawTrigammonHighlights(state, pp, PW, mainStartY, mainAreaH, armPtY, ARM_HW, ARM_HH, zones, theme) {
+    const ctx = this.ctx;
+    const p   = state.currentPlayer;
+
+    // Selected point
+    if (state.selectedPoint !== null) {
+      ctx.fillStyle = theme.selected;
+      if (state.selectedPoint === 'bar') {
+        // Highlight all bar zones for current player
+        for (const z of zones) {
+          if (z.type === 'bar' && z.player === p) ctx.fillRect(z.x, z.y, z.w, z.h);
+        }
+      } else if (state.selectedPoint < 24) {
+        ctx.fillRect(pp(state.selectedPoint), mainStartY, PW, mainAreaH);
+      } else {
+        // Arm point
+        const acy = armPtY(state.selectedPoint);
+        ctx.beginPath();
+        ctx.moveTo(this.canvas.width / 2,            acy - ARM_HH * 1.5);
+        ctx.lineTo(this.canvas.width / 2 + ARM_HW * 1.5, acy);
+        ctx.lineTo(this.canvas.width / 2,            acy + ARM_HH * 1.5);
+        ctx.lineTo(this.canvas.width / 2 - ARM_HW * 1.5, acy);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    // Valid move destinations
+    for (const vm of state.validMoves) {
+      ctx.fillStyle = theme.validMove;
+      if (vm === 'bearoff') {
+        for (const z of zones) {
+          if (z.type === 'off' && z.player === p) ctx.fillRect(z.x, z.y, z.w, z.h);
+        }
+      } else if (vm < 24) {
+        ctx.fillRect(pp(vm), mainStartY, PW, mainAreaH);
+      } else {
+        const acy = armPtY(vm);
+        ctx.beginPath();
+        ctx.moveTo(this.canvas.width / 2,            acy - ARM_HH * 1.5);
+        ctx.lineTo(this.canvas.width / 2 + ARM_HW * 1.5, acy);
+        ctx.lineTo(this.canvas.width / 2,            acy + ARM_HH * 1.5);
+        ctx.lineTo(this.canvas.width / 2 - ARM_HW * 1.5, acy);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
