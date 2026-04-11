@@ -23,10 +23,9 @@ export class UIManager {
     // Game screen controls
     this.$backBtn      = document.getElementById('back-btn');
     this.$rollBtn      = document.getElementById('roll-btn');
+    this.$undoBtn      = document.getElementById('undo-btn');
     this.$playerList   = document.getElementById('player-list');
     this.$turnIndicator= document.getElementById('turn-indicator');
-    this.$diceContainer= document.getElementById('dice-container');
-    this.$logEntries   = document.getElementById('log-entries');
 
     // Win screen
     this.$winTitle     = document.getElementById('win-title');
@@ -54,16 +53,26 @@ export class UIManager {
   // Screen transitions
   // ═══════════════════════════════════════════════════════════════════════════
 
-  showSetup() {
+  showSetup(hasSave = false) {
     this.$setup.classList.add('active');
     this.$game.classList.remove('active');
     this.$win.classList.add('hidden');
+    // Return global buttons to body (fixed positioning)
+    document.body.insertBefore(this.$themeToggle, document.body.firstChild);
+    document.body.insertBefore(this.$settingsBtn, this.$themeToggle.nextSibling);
+    // Show/hide continue button
+    const continueBtn = document.getElementById('continue-btn');
+    if (continueBtn) continueBtn.classList.toggle('hidden', !hasSave);
   }
 
   showGame() {
     this.$setup.classList.remove('active');
     this.$game.classList.add('active');
     this.$win.classList.add('hidden');
+    // Move global buttons into top bar alongside undo/flip
+    const topRight = this.$game.querySelector('.top-right');
+    topRight.appendChild(this.$themeToggle);
+    topRight.appendChild(this.$settingsBtn);
   }
 
   showWin(winnerName, winnerColor, scores, players) {
@@ -241,122 +250,53 @@ export class UIManager {
   // Game UI updates
   // ═══════════════════════════════════════════════════════════════════════════
 
-  updatePlayerList(players, currentPlayer, borneOff, bar) {
+  updatePlayerList(players, currentPlayer) {
+    if (!this.$playerList) return;
     this.$playerList.replaceChildren();
     players.forEach((pl, i) => {
       const div = document.createElement('div');
       div.className = `player-card ${i === currentPlayer ? 'active' : ''}`;
+      div.style.borderColor = i === currentPlayer ? pl.color : 'transparent';
 
-      const avatarC = document.createElement('canvas');
-      avatarC.width  = 36;
-      avatarC.height = 36;
-      PixelArt.drawCharacter(avatarC, pl.color);
+      const dot = document.createElement('div');
+      dot.className        = 'player-dot';
+      dot.style.background = pl.color;
 
-      // Build structure without putting user-controlled strings in innerHTML
-      const avatarWrap = document.createElement('div');
-      avatarWrap.className = 'player-avatar-wrap';
-      avatarWrap.style.borderColor = pl.color;
-      avatarWrap.appendChild(avatarC);
+      const nameSpan = document.createElement('span');
+      nameSpan.className   = 'player-name';
+      nameSpan.textContent = pl.name;   // textContent — safe
 
-      const infoDiv = document.createElement('div');
-      infoDiv.className = 'player-info';
-
-      const nameDiv = document.createElement('div');
-      nameDiv.className   = 'player-name';
-      nameDiv.textContent = pl.name;             // textContent — safe
-
-      const statsDiv = document.createElement('div');
-      statsDiv.className = 'player-stats';
-      const borneSpan = document.createElement('span');
-      borneSpan.textContent = `✅ ${Number(borneOff[i])}`;
-      const barSpan = document.createElement('span');
-      barSpan.textContent = `🔴 ${Number(bar[i])}`;
-      statsDiv.appendChild(borneSpan);
-      statsDiv.appendChild(barSpan);
-
-      infoDiv.appendChild(nameDiv);
-      infoDiv.appendChild(statsDiv);
-
-      div.appendChild(avatarWrap);
-      div.appendChild(infoDiv);
-
-      if (i === currentPlayer) {
-        const arrow = document.createElement('div');
-        arrow.className   = 'turn-arrow';
-        arrow.textContent = '▶';
-        div.appendChild(arrow);
-      }
-
+      div.appendChild(dot);
+      div.appendChild(nameSpan);
       this.$playerList.appendChild(div);
     });
   }
 
   updateTurnIndicator(playerName, color, phase) {
-    const phaseLabel = phase === 'rolling' ? '🎲 Roll dice' : '♟ Choose move';
+    if (!this.$turnIndicator) return;
     this.$turnIndicator.replaceChildren();
 
     const dot = document.createElement('div');
-    dot.className = 'turn-dot';
+    dot.className        = 'turn-dot';
     dot.style.background = color;
 
-    const info = document.createElement('div');
-
-    const nameDiv = document.createElement('div');
-    nameDiv.className   = 'turn-name';
-    nameDiv.textContent = playerName;        // textContent — safe
-
-    const phaseDiv = document.createElement('div');
-    phaseDiv.className   = 'turn-phase';
-    phaseDiv.textContent = phaseLabel;
-
-    info.appendChild(nameDiv);
-    info.appendChild(phaseDiv);
+    const label = document.createElement('span');
+    label.className   = 'turn-name';
+    label.textContent = `${playerName}: ${phase === 'rolling' ? '🎲 Roll' : '♟ Move'}`;
 
     this.$turnIndicator.appendChild(dot);
-    this.$turnIndicator.appendChild(info);
-  }
-
-  updateDice(dice, movesLeft) {
-    this.$diceContainer.replaceChildren();
-    const faces = ['', '⚀','⚁','⚂','⚃','⚄','⚅'];
-    const isDoubles = dice.length === 2 && dice[0] === dice[1];
-
-    if (isDoubles) {
-      const val       = dice[0];
-      const remaining = movesLeft.filter(v => v === val).length;
-      for (let i = 0; i < 4; i++) {
-        const d = document.createElement('div');
-        d.className   = 'die' + (i >= remaining ? ' used' : '');
-        d.textContent = faces[val] || val;
-        this.$diceContainer.appendChild(d);
-      }
-    } else {
-      const ml = [...movesLeft];
-      dice.forEach(v => {
-        const d = document.createElement('div');
-        d.className   = 'die';
-        d.textContent = faces[v] || v;
-        const idx = ml.indexOf(v);
-        if (idx === -1) d.classList.add('used');
-        else            ml.splice(idx, 1);
-        this.$diceContainer.appendChild(d);
-      });
-    }
+    this.$turnIndicator.appendChild(label);
   }
 
   setRollButtonState(enabled, label = '🎲 Roll') {
-    this.$rollBtn.disabled   = !enabled;
+    if (!this.$rollBtn) return;
+    this.$rollBtn.disabled    = !enabled;
     this.$rollBtn.textContent = label;
   }
 
-  updateMoveLog(entries) {
-    this.$logEntries.replaceChildren();
-    entries.slice(0, 10).forEach(e => {
-      const div = document.createElement('div');
-      div.className   = 'log-entry';
-      div.textContent = e.msg;
-      this.$logEntries.appendChild(div);
-    });
+  setUndoButtonState(enabled) {
+    if (!this.$undoBtn) return;
+    this.$undoBtn.disabled = !enabled;
   }
 
   // Tutorial overlay for Unigammon

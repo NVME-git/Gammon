@@ -74,12 +74,29 @@ body {
   border-radius: 50%;
   font-size: 1.2rem;
   cursor: pointer;
-  transition: background var(--transition), transform var(--transition);
+  transition: background var(--transition), transform var(--transition),
+              color var(--transition), border-color var(--transition);
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
-.icon-btn:hover { background: var(--card-hover); transform: scale(1.1); }
+.icon-btn:hover:not(:disabled) { background: var(--card-hover); transform: scale(1.1); }
+.icon-btn.active {
+  background: var(--surface);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.icon-btn:disabled { opacity: 0.32; cursor: not-allowed; }
+.icon-btn:disabled:hover { background: var(--panel); transform: none; }
+
+/* When inside the top bar, remove fixed positioning */
+.top-right .icon-btn {
+  position: static;
+  top: auto;
+  right: auto;
+  z-index: auto;
+}
 
 .theme-btn    { right: 60px; }
 .settings-btn { right: 14px; }
@@ -348,8 +365,20 @@ body {
 .btn-secondary:hover:not(:disabled) { background: var(--card-hover); }
 .btn-ghost    { background: transparent; color: var(--subtext); border: 1px solid var(--border); }
 .btn-ghost:hover { background: var(--surface); color: var(--text); }
+.btn-ghost.active {
+  background: var(--surface);
+  color: var(--accent);
+  border-color: var(--accent);
+}
 
 .btn-xl { padding: 13px 36px; font-size: 1.05rem; border-radius: var(--radius-lg); }
+
+.start-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
 .btn-sm { padding: 6px 12px;  font-size: 0.82rem; }
 
 .funny-name-btn { padding: 7px 10px; flex-shrink: 0; }
@@ -365,36 +394,42 @@ body {
 
 .game-layout {
   display: flex;
+  flex-direction: column;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
 }
 
-/* Side panels */
-.side-panel {
-  width: 200px;
-  min-width: 170px;
-  max-width: 220px;
-  flex-shrink: 0;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  padding: 12px;
+/* ── Top bar (3-section: left | centre | right) ─────────────────────────────── */
+.game-top-bar {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-  transition: background var(--transition);
+  align-items: center;
+  padding: 0 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  height: 50px;
+  gap: 8px;
 }
-.left-panel  { border-radius: 0 var(--radius) var(--radius) 0; }
-.right-panel { border-radius: var(--radius) 0 0 var(--radius); }
 
-/* Canvas wrapper */
+.top-left, .top-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  overflow: hidden;
+}
+.top-right { justify-content: flex-end; flex-shrink: 0; }
+
+
+/* ── Canvas (fills everything below the top bar) ────────────────────────────── */
 .canvas-wrapper {
   flex: 1;
   display: flex;
   align-items: stretch;
   justify-content: stretch;
   overflow: hidden;
+  min-height: 0;
 }
 #game-canvas {
   display: block;
@@ -403,156 +438,64 @@ body {
   cursor: pointer;
 }
 
-/* Player list */
-.player-list { display: flex; flex-direction: column; gap: 8px; }
+/* ── Player list (horizontal in top-left) ───────────────────────────────────── */
+.player-list {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  overflow: hidden;
+  align-items: center;
+}
 
 .player-card {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
-  border-radius: var(--radius);
-  border: 1px solid transparent;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  border: 1.5px solid transparent;
   transition: background var(--transition), border-color var(--transition);
-}
-.player-card.active {
-  background: rgba(233,69,96,0.12);
-  border-color: var(--accent);
-}
-
-.player-avatar-wrap {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 2px solid var(--border);
-  overflow: hidden;
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface);
 }
-.player-avatar-wrap canvas { display: block; }
+.player-card.active { background: rgba(233,69,96,0.12); }
 
-.player-info { flex: 1; min-width: 0; }
+.player-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 .player-name {
-  font-size: 0.82rem;
+  font-size: 0.80rem;
   font-weight: 600;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.player-stats {
-  font-size: 0.72rem;
-  color: var(--subtext);
-  display: flex;
-  gap: 8px;
-  margin-top: 2px;
-}
-.turn-arrow {
-  color: var(--accent);
-  font-size: 0.85rem;
-  flex-shrink: 0;
 }
 
-/* Dice area */
-.dice-area {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-}
-.dice-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-height: 40px;
-  align-items: center;
-}
-.die {
-  width: 36px;
-  height: 36px;
-  background: var(--surface);
-  border: 2px solid var(--border);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  transition: opacity var(--transition);
-  animation: dieRoll 0.35s ease;
-}
-.die.used { opacity: 0.3; }
-@keyframes dieRoll {
-  0%   { transform: rotate(-18deg) scale(0.8); opacity: 0; }
-  60%  { transform: rotate(6deg)  scale(1.08); }
-  100% { transform: rotate(0deg)  scale(1);    opacity: 1; }
-}
-.dice-badge {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--accent);
-  padding: 2px 6px;
-  border: 1px solid var(--accent);
-  border-radius: 20px;
-}
-
-/* Turn indicator */
+/* ── Turn indicator (centred in top bar) ────────────────────────────────────── */
 .turn-indicator {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px;
+  border-radius: 20px;
+  padding: 5px 14px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .turn-dot {
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--subtext);
   flex-shrink: 0;
-  transition: background var(--transition);
-  box-shadow: 0 0 8px currentColor;
+  box-shadow: 0 0 6px currentColor;
 }
-.turn-name  { font-size: 0.85rem; font-weight: 700; }
-.turn-phase { font-size: 0.72rem; color: var(--subtext); margin-top: 2px; }
+.turn-name { font-size: 0.82rem; font-weight: 700; }
 
-/* Move log */
-.move-log h4 {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--subtext);
-  margin-bottom: 8px;
-}
-.log-entries {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  overflow-y: auto;
-  max-height: calc(100vh - 260px);
-}
-.log-entry {
-  font-size: 0.74rem;
-  color: var(--subtext);
-  padding: 4px 6px;
-  background: var(--surface);
-  border-radius: 5px;
-  border-left: 2px solid var(--border);
-  animation: logSlide 0.2s ease;
-}
-@keyframes logSlide {
-  from { opacity: 0; transform: translateX(8px); }
-  to   { opacity: 1; transform: none; }
-}
-
-/* Tutorial hint */
+/* ── Tutorial hint ──────────────────────────────────────────────────────────── */
 .tutorial-hint {
   position: absolute;
-  bottom: 18px;
+  bottom: 62px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0,0,0,0.78);
@@ -668,16 +611,14 @@ body {
    RESPONSIVE
    ═══════════════════════════════════════════════════════════════════════════════ */
 @media (max-width: 760px) {
-  .side-panel { width: 150px; min-width: 130px; padding: 8px; }
   .mode-cards { grid-template-columns: repeat(2, 1fr); }
   .win-card   { padding: 28px 24px; }
+  .game-top-bar { padding-right: 12px; }
 }
 
 @media (max-width: 560px) {
-  .side-panel   { display: none; }
-  .canvas-wrapper { width: 100vw; }
-  .mode-cards   { grid-template-columns: 1fr 1fr; }
-  body          { overflow-y: auto; }
+  .mode-cards { grid-template-columns: 1fr 1fr; }
+  body        { overflow-y: auto; }
   #game-screen.active { overflow: hidden; }
 }
 
@@ -693,3 +634,45 @@ body {
 [data-theme="light"] .mode-card         { background: var(--panel); }
 [data-theme="light"] .side-panel        { background: var(--panel); }
 [data-theme="light"] .die               { background: #fff; border-color: var(--border); }
+
+/* ── Landscape enforcement overlay ──────────────────────────────────────────── */
+.rotate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  text-align: center;
+  padding: 32px;
+}
+
+.rotate-overlay .rotate-icon {
+  font-size: 3.5rem;
+  animation: rotateHint 2s ease-in-out infinite;
+}
+
+@keyframes rotateHint {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  30%       { transform: rotate(-30deg) scale(1.05); }
+  70%       { transform: rotate(30deg) scale(1.05); }
+}
+
+.rotate-overlay p {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.rotate-overlay small {
+  font-size: 0.82rem;
+  color: var(--subtext);
+}
+
+@media screen and (orientation: portrait) {
+  .rotate-overlay { display: flex; }
+}

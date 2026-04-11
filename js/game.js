@@ -52,6 +52,9 @@ export class BackgammonGame {
     // callbacks set by main.js
     this.onCheckerHit = null;
 
+    // Undo history
+    this._history = [];
+
     this._setupBoard();
   }
 
@@ -126,6 +129,7 @@ export class BackgammonGame {
 
   rollDice() {
     if (this.phase !== 'rolling') return null;
+    this._saveHistory();
 
     const d1 = Math.ceil(Math.random() * 6);
     const d2 = Math.ceil(Math.random() * 6);
@@ -258,6 +262,7 @@ export class BackgammonGame {
    * @param {number|'bearoff'} to  actual point index or 'bearoff'
    */
   moveChecker(from, to) {
+    this._saveHistory();
     const p = this.currentPlayer;
 
     if (from === 'bar') {
@@ -415,6 +420,83 @@ export class BackgammonGame {
   _log(msg) {
     this.moveLog.unshift({ msg, player: this.currentPlayer });
     if (this.moveLog.length > 60) this.moveLog.pop();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Undo
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  _saveHistory() {
+    this._history.push({
+      points:        this.points.map(p => ({ ...p })),
+      bar:           [...this.bar],
+      borneOff:      [...this.borneOff],
+      currentPlayer: this.currentPlayer,
+      dice:          [...this.dice],
+      movesLeft:     [...this.movesLeft],
+      phase:         this.phase,
+      moveLog:       this.moveLog.map(e => ({ ...e })),
+      turnCount:     this.turnCount,
+      winner:        this.winner,
+    });
+    if (this._history.length > 20) this._history.shift();
+  }
+
+  undoMove() {
+    if (this._history.length === 0) return false;
+    const s            = this._history.pop();
+    this.points        = s.points;
+    this.bar           = s.bar;
+    this.borneOff      = s.borneOff;
+    this.currentPlayer = s.currentPlayer;
+    this.dice          = s.dice;
+    this.movesLeft     = s.movesLeft;
+    this.phase         = s.phase;
+    this.selectedPoint = null;
+    this.validMoves    = [];
+    this.moveLog       = s.moveLog;
+    this.turnCount     = s.turnCount;
+    this.winner        = s.winner;
+    return true;
+  }
+
+  canUndo() {
+    return this._history.length > 0;
+  }
+
+  /** Full serialisable save (for localStorage). Includes mode + players. */
+  exportSave() {
+    return {
+      mode:          this.mode,
+      players:       this.players,
+      points:        this.points.map(p => ({ ...p })),
+      bar:           [...this.bar],
+      borneOff:      [...this.borneOff],
+      currentPlayer: this.currentPlayer,
+      dice:          [...this.dice],
+      movesLeft:     [...this.movesLeft],
+      phase:         this.phase,
+      moveLog:       this.moveLog.slice(),
+      turnCount:     this.turnCount,
+      winner:        this.winner,
+    };
+  }
+
+  /** Restore all mutable state from an exportSave() snapshot. */
+  importSave(save) {
+    this.points        = save.points.map(p => ({ ...p }));
+    this.bar           = [...save.bar];
+    this.borneOff      = [...save.borneOff];
+    this.currentPlayer = save.currentPlayer;
+    this.dice          = [...save.dice];
+    this.movesLeft     = [...save.movesLeft];
+    this.phase         = save.phase;
+    this.moveLog       = save.moveLog.slice();
+    this.turnCount     = save.turnCount;
+    this.winner        = save.winner;
+    this.selectedPoint = null;
+    this.validMoves    = [];
+    this._history      = [];
   }
 
   /** Return a serialisable snapshot of the game state */

@@ -15,6 +15,7 @@ export class BoardRenderer {
     this._pointAreas  = [];   // { x, y, w, h, idx }  (bounding boxes)
     this._barAreas    = [];   // { x, y, w, h }
     this._bearAreas   = [];   // { x, y, w, h }
+    this._rollArea    = [];   // { x, y, w, h }
     this._pointCenters = [];  // { cx, cy, idx }  (for tri/quad boards)
 
     // Mini-canvas cache for pixel-art avatars
@@ -23,6 +24,9 @@ export class BoardRenderer {
     // Animation state
     this._animating   = false;
     this._animQueue   = [];
+
+    // Board flip (set externally by main.js)
+    this.flipped = false;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -42,6 +46,7 @@ export class BoardRenderer {
     this._pointAreas   = [];
     this._barAreas     = [];
     this._bearAreas    = [];
+    this._rollArea     = [];
     this._pointCenters = [];
 
     switch (this.game.mode) {
@@ -63,6 +68,11 @@ export class BoardRenderer {
     const x = (clientX - rect.left) * scaleX;
     const y = (clientY - rect.top)  * scaleY;
 
+    for (const a of this._rollArea) {
+      if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h) {
+        return { type: 'roll' };
+      }
+    }
     for (const a of this._pointAreas) {
       if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h) {
         return { type: 'point', idx: a.idx };
@@ -104,31 +114,48 @@ export class BoardRenderer {
   // ═══════════════════════════════════════════════════════════════════════════
 
   _renderLinear() {
-    const ctx      = this.ctx;
-    const W        = this.canvas.width;
-    const H        = this.canvas.height;
-    const theme    = this._theme();
-    const game     = this.game;
-    const state    = game.getState();
+    const ctx   = this.ctx;
+    const W     = this.canvas.width;
+    const H     = this.canvas.height;
+    const theme = this._theme();
+    const game  = this.game;
+    const state = game.getState();
+    const is2P  = game.numPlayers === 2;
 
-    // Layout constants
-    const PAD      = 14;
-    const BEAR_W   = 56;
-    const BAR_W    = 44;
-    const BOARD_H  = H - PAD * 2;
-    const boardY   = PAD;
+    const PAD     = 14;
+    const ZONE_W  = 56;   // width of each BAR or OFF side zone
+    const BOARD_H = H - PAD * 2;
+    const boardY  = PAD;
+    const CY      = boardY + BOARD_H / 2;
+    const TH      = BOARD_H * 0.30;   // diamond half-height (leaves room for dice above)
 
-    // Available width for 24 point columns
-    const AVAIL    = W - PAD * 2 - BEAR_W * 2 - BAR_W;
-    const PW       = AVAIL / 24;        // point width
-    const TH       = BOARD_H * 0.42;    // triangle height
-    const CY       = boardY + BOARD_H / 2; // centre line
+    // ── Zone layout ─────────────────────────────────────────────────────────
+    // 2-player : [P1-OFF][P0-BAR] | 24 pts | [P1-BAR][P0-OFF]
+    // 1-player : [P0-BAR]         | 24 pts | [P0-OFF]
+    const numSide    = is2P ? 2 : 1;
+    const boardStartX = PAD + ZONE_W * numSide;
+    const AVAIL      = W - PAD * 2 - ZONE_W * numSide * 2;
+    const PW         = AVAIL / 24;
+    const boardEndX  = boardStartX + PW * 24;
 
-    // Bearing-off zone x positions
-    const bearL_x  = PAD;
-    const bearR_x  = W - PAD - BEAR_W;
-    const leftEnd  = PAD + BEAR_W;
-    const barX     = leftEnd + PW * 12;
+    // Flip-aware point column x position
+    const pp = i => boardStartX + (this.flipped ? (23 - i) : i) * PW;
+
+    // Zone content definitions (player + type, no position yet)
+    const leftData  = is2P
+      ? [{ player: 1, type: 'off' }, { player: 0, type: 'bar' }]
+      : [{ player: 0, type: 'bar' }];
+    const rightData = is2P
+      ? [{ player: 1, type: 'bar' }, { player: 0, type: 'off' }]
+      : [{ player: 0, type: 'off' }];
+
+    // When flipped, swap left/right content so BAR/OFF stay with the correct edge
+    const leftContent  = this.flipped ? rightData : leftData;
+    const rightContent = this.flipped ? leftData  : rightData;
+
+    const leftZones  = leftContent.map( (d, k) => ({ ...d, x: PAD          + k * ZONE_W }));
+    const rightZones = rightContent.map((d, k) => ({ ...d, x: boardEndX    + k * ZONE_W }));
+    const allZones   = [...leftZones, ...rightZones];
 
     // ── Board background ─────────────────────────────────────────────────────
     ctx.fillStyle = theme.board;
@@ -139,160 +166,324 @@ export class BoardRenderer {
     ctx.lineWidth   = 2;
     ctx.stroke();
 
-    // ── Draw 24 triangles ────────────────────────────────────────────────────
+    // ── Dashed centre axis line ──────────────────────────────────────────────
+    ctx.save();
+    ctx.strokeStyle = theme.boardBorder;
+    ctx.lineWidth   = 1;
+    ctx.globalAlpha = 0.4;
+    ctx.setLineDash([3, 6]);
+    ctx.beginPath();
+    ctx.moveTo(boardStartX, CY);
+    ctx.lineTo(boardEndX,   CY);
+    ctx.stroke();
+    ctx.restore();
+
+    // ── 24 diamond point shapes (full, symmetric, all centred on CY) ─────────
+    const dColors    = [theme.triangle1, theme.triangle2];
+    const labelColor = 'rgba(255,255,255,0.88)';
     for (let i = 0; i < 24; i++) {
-      const col     = i < 12 ? i : i + 1;   // skip bar column
-      const px_     = leftEnd + col * PW;
-      const even    = i % 2 === 0;
+      const px  = pp(i);
+      const pcx = px + PW / 2;
+      const col = dColors[i % 2];
 
-      // Colour scheme: alternating per quadrant
-      const q       = Math.floor(i / 6);
-      const colors  = [theme.triangle1, theme.triangle2];
-      const triColor = colors[(q + (even ? 0 : 1)) % 2];
-
-      ctx.fillStyle = triColor;
+      ctx.fillStyle = col;
       ctx.beginPath();
-      if (even) {
-        // Upward triangle (base at bottom)
-        ctx.moveTo(px_,         CY + TH);
-        ctx.lineTo(px_ + PW,    CY + TH);
-        ctx.lineTo(px_ + PW / 2, CY - TH);
-      } else {
-        // Downward triangle (base at top)
-        ctx.moveTo(px_,         CY - TH);
-        ctx.lineTo(px_ + PW,    CY - TH);
-        ctx.lineTo(px_ + PW / 2, CY + TH);
-      }
+      ctx.moveTo(pcx,     CY - TH);  // top tip
+      ctx.lineTo(px + PW, CY);       // right (widest — on the axis)
+      ctx.lineTo(pcx,     CY + TH);  // bottom tip
+      ctx.lineTo(px,      CY);       // left (widest — on the axis)
       ctx.closePath();
       ctx.fill();
 
-      // Point number label
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.font      = `bold ${Math.max(9, Math.floor(PW * 0.38))}px Arial`;
-      ctx.textAlign = 'center';
-      const labelY  = even ? CY + TH - 6 : CY - TH + 14;
-      ctx.fillText(i + 1, px_ + PW / 2, labelY);
+      // Point numbers — top tip: forward order; bottom tip: reversed order
+      ctx.fillStyle    = labelColor;
+      ctx.font         = `bold ${Math.max(8, Math.floor(PW * 0.34))}px Arial`;
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(i + 1,  pcx, CY - TH + 13);   // top
+      ctx.fillText(24 - i, pcx, CY + TH - 4);     // bottom (reversed)
 
-      // Register hit-test area
-      const areaX = px_;
-      const areaY = even ? CY - TH : CY - TH;
-      this._pointAreas.push({ x: areaX, y: boardY, w: PW, h: BOARD_H, idx: i });
+      this._pointAreas.push({ x: px, y: boardY, w: PW, h: BOARD_H, idx: i });
     }
 
-    // ── Bar area ─────────────────────────────────────────────────────────────
-    ctx.fillStyle = theme.barArea;
-    ctx.fillRect(barX, boardY, BAR_W, BOARD_H);
-    ctx.fillStyle = theme.subtext || '#888';
-    ctx.font      = `bold 10px Arial`;
-    ctx.textAlign = 'center';
-    ctx.save();
-    ctx.translate(barX + BAR_W / 2, CY);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillText('BAR', 0, 4);
-    ctx.restore();
-
-    this._barAreas.push({ x: barX, y: boardY, w: BAR_W, h: BOARD_H });
-
-    // ── Bearing-off zones ────────────────────────────────────────────────────
-    this._drawBearoffZoneLinear(bearR_x, boardY, BEAR_W, BOARD_H, 0, 'RIGHT', theme);
-    this._drawBearoffZoneLinear(bearL_x, boardY, BEAR_W, BOARD_H, 1, 'LEFT',  theme);
-
-    this._bearAreas.push({ x: bearR_x, y: boardY, w: BEAR_W, h: BOARD_H });
-    this._bearAreas.push({ x: bearL_x, y: boardY, w: BEAR_W, h: BOARD_H });
-
-    // ── Checkers on the board ─────────────────────────────────────────────────
+    // ── Checkers (stack centred on the horizontal axis) ───────────────────────
     const CR = Math.min(PW / 2 - 2, 14);
     for (let i = 0; i < 24; i++) {
-      const pt   = state.points[i];
+      const pt = state.points[i];
       if (pt.count === 0) continue;
 
-      const col  = i < 12 ? i : i + 1;
-      const px_  = leftEnd + col * PW;
-      const cx   = px_ + PW / 2;
-      const even = i % 2 === 0;
+      const px  = pp(i);
+      const pcx = px + PW / 2;
 
       for (let s = 0; s < pt.count; s++) {
-        const cy = even
-          ? CY + TH - CR - s * (CR * 2 + 1)
-          : CY - TH + CR + s * (CR * 2 + 1);
-        this._drawChecker(cx, cy, CR, pt.player, s, pt.count, theme);
+        // Centre the entire stack around CY
+        const offset = (s - (pt.count - 1) / 2) * (CR * 2 + 1);
+        this._drawChecker(pcx, CY + offset, CR, pt.player, s, pt.count, theme);
       }
     }
 
-    // ── Bar checkers ──────────────────────────────────────────────────────────
-    const barCX = barX + BAR_W / 2;
-    for (let p = 0; p < game.numPlayers; p++) {
-      const barCount = state.bar[p];
-      if (barCount === 0) continue;
-      const half   = game.numPlayers === 2 ? (p === 0 ? 1 : -1) : (p < 2 ? 1 : -1);
-      for (let s = 0; s < barCount; s++) {
-        const cy = CY + half * (CR + s * (CR * 2 + 2));
-        this._drawChecker(barCX, cy, CR, p, s, barCount, theme);
+    // ── Side zones: BAR and OFF, colour-coded per player ─────────────────────
+    const ZCR = Math.min(ZONE_W / 2 - 4, 12);
+    for (const zone of allZones) {
+      if (zone.player >= game.numPlayers) continue;
+
+      const pColor = game.players[zone.player].color;
+      const count  = zone.type === 'bar'
+        ? state.bar[zone.player]
+        : state.borneOff[zone.player];
+
+      // Player-coloured tinted background
+      ctx.fillStyle = pColor + '28';
+      ctx.fillRect(zone.x, boardY, ZONE_W, BOARD_H);
+
+      // Player-coloured border
+      ctx.save();
+      ctx.strokeStyle = pColor;
+      ctx.lineWidth   = 1.5;
+      ctx.globalAlpha = 0.45;
+      ctx.strokeRect(zone.x + 1, boardY + 1, ZONE_W - 2, BOARD_H - 2);
+      ctx.restore();
+
+      // Labels
+      ctx.fillStyle    = pColor;
+      ctx.font         = 'bold 9px Arial';
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`P${zone.player + 1}`, zone.x + ZONE_W / 2, boardY + 5);
+      ctx.fillText(zone.type === 'bar' ? 'BAR' : 'OFF', zone.x + ZONE_W / 2, boardY + 16);
+      ctx.textBaseline = 'alphabetic';
+
+      // Count badge
+      if (count > 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.font      = 'bold 10px Arial';
+        ctx.fillText(`×${count}`, zone.x + ZONE_W / 2, boardY + 31);
       }
-    }
 
-    // ── Highlights ────────────────────────────────────────────────────────────
-    this._drawLinearHighlights(state, leftEnd, PW, barX, BAR_W, CY, TH, BOARD_H, boardY, bearR_x, bearL_x, BEAR_W, theme);
-  }
-
-  _drawBearoffZoneLinear(x, y, w, h, player, side, theme) {
-    const ctx   = this.ctx;
-    const state = this.game.getState();
-    const count = state.borneOff[player];
-
-    ctx.fillStyle = theme.barArea;
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = theme.boardBorder;
-    ctx.lineWidth   = 1;
-    ctx.strokeRect(x, y, w, h);
-
-    ctx.fillStyle = theme.subtext || '#888';
-    ctx.font      = 'bold 9px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('OFF', x + w / 2, y + 12);
-
-    if (count > 0 && player < this.game.numPlayers) {
-      const color = this.game.players[player].color;
-      const CR    = Math.min(w / 2 - 3, 12);
+      // Checker stack inside zone
       for (let i = 0; i < count; i++) {
-        const cy = y + 22 + i * (CR * 2 + 2) + CR;
-        this._drawChecker(x + w / 2, cy, CR, player, i, count, this._theme());
+        const zy = boardY + 38 + i * (ZCR * 2 + 2) + ZCR;
+        if (zy + ZCR > boardY + BOARD_H - 6) break;
+        this._drawChecker(zone.x + ZONE_W / 2, zy, ZCR, zone.player, i, count, theme);
+      }
+
+      // Register hit areas
+      if (zone.type === 'bar') {
+        this._barAreas.push({ x: zone.x, y: boardY, w: ZONE_W, h: BOARD_H });
+      } else {
+        this._bearAreas.push({ x: zone.x, y: boardY, w: ZONE_W, h: BOARD_H });
       }
     }
+
+    // ── Chevrons showing each player's movement direction ────────────────────
+    this._drawChevrons(game, boardStartX, boardEndX, boardY, CY, TH, BOARD_H);
+
+    // ── Highlights (drawn last, transparent overlay over everything) ──────────
+    this._drawLinearHighlights(state, boardStartX, PW, allZones, ZONE_W, BOARD_H, boardY, theme, this.flipped);
+
+    // ── Dice drawn in the top free area ──────────────────────────────────────
+    this._drawDiceOnCanvas(state, boardStartX, boardEndX, boardY, CY, TH);
+
+    // ── Roll button drawn in the bottom free area ─────────────────────────────
+    this._drawRollButton(state, boardStartX, boardEndX, CY, TH, boardY, BOARD_H);
   }
 
-  _drawLinearHighlights(state, leftEnd, PW, barX, BAR_W, CY, TH, BOARD_H, boardY, bearR_x, bearL_x, BEAR_W, theme) {
+  _drawChevrons(game, boardStartX, boardEndX, boardY, CY, TH, BOARD_H) {
+    if (game.numPlayers < 2) return;
+
     const ctx = this.ctx;
 
-    // Highlight selected point
-    if (state.selectedPoint !== null) {
-      const sel = state.selectedPoint;
-      if (sel === 'bar') {
-        ctx.fillStyle = theme.selected;
-        ctx.fillRect(barX, boardY, BAR_W, BOARD_H);
+    // Which player moves visually rightward / leftward depends on flip state.
+    // Unflipped: P0 → right, P1 ← left
+    // Flipped  : P1 → right, P0 ← left
+    const rightPlayer = this.flipped ? 1 : 0;
+    const leftPlayer  = this.flipped ? 0 : 1;
+
+    const rightColor = game.players[rightPlayer]?.color || '#888';
+    const leftColor  = game.players[leftPlayer]?.color  || '#888';
+
+    const topStripCY    = boardY + ((CY - TH) - boardY) / 2;       // centre of top strip
+    const bottomStripCY = (CY + TH) + (boardY + BOARD_H - (CY + TH)) / 2; // centre of bottom strip
+
+    const chevH   = Math.min((CY - TH - boardY) * 0.45, 20);
+    const chevW   = chevH * 0.7;
+    const spacing = Math.max(36, (boardEndX - boardStartX) / 18);
+    const boardW  = boardEndX - boardStartX;
+    const count   = Math.floor(boardW / spacing);
+    const offset  = (boardW - (count - 1) * spacing) / 2;
+
+    for (let i = 0; i < count; i++) {
+      const x = boardStartX + offset + i * spacing;
+      // Top strip: leftward (leftPlayer's color)
+      this._drawOneChevron(ctx, x, topStripCY, chevW, chevH, false, leftColor, 0.22);
+      // Bottom strip: rightward (rightPlayer's color)
+      this._drawOneChevron(ctx, x, bottomStripCY, chevW, chevH, true, rightColor, 0.22);
+    }
+  }
+
+  _drawOneChevron(ctx, cx, cy, w, h, pointRight, color, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = Math.max(1.5, h * 0.13);
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    if (pointRight) {
+      ctx.moveTo(cx - w / 2, cy - h / 2);
+      ctx.lineTo(cx + w / 2, cy);
+      ctx.lineTo(cx - w / 2, cy + h / 2);
+    } else {
+      ctx.moveTo(cx + w / 2, cy - h / 2);
+      ctx.lineTo(cx - w / 2, cy);
+      ctx.lineTo(cx + w / 2, cy + h / 2);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  _drawRollButton(state, boardStartX, boardEndX, CY, TH, boardY, BOARD_H) {
+    const ctx     = this.ctx;
+    const theme   = this._theme();
+    const isDark  = document.documentElement.getAttribute('data-theme') === 'dark';
+    const canRoll = state.phase === 'rolling';
+
+    const stripH  = (boardY + BOARD_H) - (CY + TH);
+    const btnH    = Math.min(stripH - 10, 54);
+    const btnW    = Math.min((boardEndX - boardStartX) * 0.38, 220);
+    const btnX    = (boardStartX + boardEndX) / 2 - btnW / 2;
+    const btnY    = (CY + TH) + (stripH - btnH) / 2;
+    const radius  = btnH / 2;
+
+    // Register hit area only when clickable
+    this._rollArea = [];
+    if (canRoll) {
+      this._rollArea.push({ x: btnX, y: btnY, w: btnW, h: btnH });
+    }
+
+    // Button body
+    ctx.globalAlpha = canRoll ? 1 : 0.35;
+    const accent    = '#e94560';
+    ctx.fillStyle   = canRoll ? accent : (isDark ? '#2a2a4a' : '#b8a99a');
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY, btnW, btnH, radius);
+    ctx.fill();
+
+    // Subtle inner highlight
+    if (canRoll) {
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.beginPath();
+      ctx.roundRect(btnX + 2, btnY + 2, btnW - 4, btnH / 2 - 2, [radius - 1, radius - 1, 0, 0]);
+      ctx.fill();
+    }
+
+    // Label
+    const fontSize = Math.min(btnH * 0.42, 22);
+    ctx.fillStyle    = canRoll ? '#ffffff' : (isDark ? '#556' : '#8a7a6a');
+    ctx.font         = `bold ${fontSize}px Arial`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(canRoll ? '🎲  Roll Dice' : '— Moving —', btnX + btnW / 2, btnY + btnH / 2);
+    ctx.textBaseline = 'alphabetic';
+
+    ctx.globalAlpha = 1;
+  }
+
+  _drawDiceOnCanvas(state, boardStartX, boardEndX, boardY, CY, TH) {
+    if (state.dice.length === 0) return;
+
+    const ctx    = this.ctx;
+    const theme  = this._theme();
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+    const topAreaH = (CY - TH) - boardY - 10;
+    if (topAreaH < 22) return;
+
+    const dieSize = topAreaH - 6;   // fill the full available height
+    const gap     = Math.max(6, dieSize * 0.15);
+
+    const isDouble = state.dice.length === 2 && state.dice[0] === state.dice[1];
+    const display  = isDouble
+      ? [state.dice[0], state.dice[0], state.dice[0], state.dice[0]]
+      : [...state.dice];
+
+    const remaining = isDouble
+      ? state.movesLeft.filter(v => v === state.dice[0]).length
+      : 0;
+
+    const mlTrack = [...state.movesLeft];
+    const faces   = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+
+    const totalW = display.length * dieSize + (display.length - 1) * gap;
+    const startX = (boardStartX + boardEndX) / 2 - totalW / 2;
+    const startY = boardY + 6 + (topAreaH - dieSize) / 2;
+
+    display.forEach((val, i) => {
+      let used;
+      if (isDouble) {
+        used = i >= remaining;
       } else {
-        const col = sel < 12 ? sel : sel + 1;
-        const px_ = leftEnd + col * PW;
-        ctx.fillStyle = theme.selected;
-        ctx.fillRect(px_, boardY, PW, BOARD_H);
+        const idx = mlTrack.indexOf(val);
+        used = idx === -1;
+        if (!used) mlTrack.splice(idx, 1);
+      }
+
+      const x = startX + i * (dieSize + gap);
+      const y = startY;
+
+      ctx.globalAlpha = used ? 0.28 : 1;
+
+      // Die body
+      ctx.fillStyle = theme.barArea;
+      ctx.beginPath();
+      ctx.roundRect(x, y, dieSize, dieSize, 9);
+      ctx.fill();
+
+      // Border — bright yellow for active, muted for used
+      ctx.strokeStyle = used ? theme.boardBorder : 'rgba(255,215,50,0.95)';
+      ctx.lineWidth   = used ? 1 : 2.5;
+      ctx.beginPath();
+      ctx.roundRect(x, y, dieSize, dieSize, 9);
+      ctx.stroke();
+
+      // Die face emoji — use bounding-box metrics for true visual centering
+      ctx.fillStyle    = isDark ? '#ffffff' : '#1a1a1a';
+      ctx.font         = `${Math.floor(dieSize * 0.82)}px Arial`;
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'alphabetic';
+      const face    = faces[val] || String(val);
+      const metrics = ctx.measureText(face);
+      const ey      = y + dieSize / 2
+                        + (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2;
+      ctx.fillText(face, x + dieSize / 2, ey);
+
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  _drawLinearHighlights(state, boardStartX, PW, zones, ZONE_W, BOARD_H, boardY, theme, flipped) {
+    const ctx = this.ctx;
+    const p   = state.currentPlayer;
+    const pp  = i => boardStartX + (flipped ? (23 - i) : i) * PW;
+
+    if (state.selectedPoint !== null) {
+      ctx.fillStyle = theme.selected;
+      if (state.selectedPoint === 'bar') {
+        const barZone = zones.find(z => z.type === 'bar' && z.player === p);
+        if (barZone) ctx.fillRect(barZone.x, boardY, ZONE_W, BOARD_H);
+      } else {
+        ctx.fillRect(pp(state.selectedPoint), boardY, PW, BOARD_H);
       }
     }
 
-    // Highlight valid moves
     for (const vm of state.validMoves) {
-      if (vm === 'bearoff') {
-        // Highlight the bearing-off zone for the current player.
-        // P0 bears off to the right end; P1 bears off to the left end.
-        const bearoffX = this.game.currentPlayer === 0 ? bearR_x : bearL_x;
-        const bearoffW = BEAR_W;
-        ctx.fillStyle = theme.validMove;
-        ctx.fillRect(bearoffX, boardY, bearoffW, BOARD_H);
-        continue;
-      }
-      const col = vm < 12 ? vm : vm + 1;
-      const px_ = leftEnd + col * PW;
       ctx.fillStyle = theme.validMove;
-      ctx.fillRect(px_, boardY, PW, BOARD_H);
+      if (vm === 'bearoff') {
+        const offZone = zones.find(z => z.type === 'off' && z.player === p);
+        if (offZone) ctx.fillRect(offZone.x, boardY, ZONE_W, BOARD_H);
+      } else {
+        ctx.fillRect(pp(vm), boardY, PW, BOARD_H);
+      }
     }
   }
 
