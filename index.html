@@ -97,10 +97,9 @@
     <div class="game-layout">
 
       <!-- Top bar: left group | centred turn indicator | right group -->
-      <div class="game-top-bar">
+      <div class="game-top-bar" id="game-top-bar">
         <div class="top-left">
           <button id="back-btn" class="btn btn-secondary btn-sm">← Menu</button>
-          <div id="player-list" class="player-list"></div>
         </div>
 
         <div id="turn-indicator" class="turn-indicator"></div>
@@ -109,6 +108,11 @@
           <button id="undo-btn" class="icon-btn" disabled title="Undo move">↩</button>
           <button id="flip-btn" class="icon-btn" title="Auto-flip board">↻</button>
         </div>
+      </div>
+
+      <!-- Collapse handle — always visible, toggles the top bar -->
+      <div class="topbar-handle" id="topbar-handle" title="Show/hide top bar">
+        <span id="topbar-arrow">▲</span>
       </div>
 
       <!-- Canvas fills everything below the top bar -->

@@ -410,7 +410,29 @@ body {
   flex-shrink: 0;
   height: 50px;
   gap: 8px;
+  overflow: hidden;
+  transition: height 0.18s ease, border-bottom-color 0.18s ease;
 }
+.game-top-bar.collapsed {
+  height: 0;
+  border-bottom-color: transparent;
+}
+
+/* ── Collapse handle ─────────────────────────────────────────────────────────── */
+.topbar-handle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 12px;
+  flex-shrink: 0;
+  cursor: pointer;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 8px;
+  color: var(--subtext);
+  transition: background var(--transition), color var(--transition);
+}
+.topbar-handle:hover { background: var(--card-hover); color: var(--text); }
 
 .top-left, .top-right {
   display: flex;

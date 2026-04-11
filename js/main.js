@@ -32,6 +32,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // Re-render board on theme change
   ui.onThemeChange = () => { if (renderer) renderer.render(); };
 
+  // Top bar collapse toggle
+  document.getElementById('topbar-handle').addEventListener('click', () => {
+    const bar   = document.getElementById('game-top-bar');
+    const arrow = document.getElementById('topbar-arrow');
+    const collapsed = bar.classList.toggle('collapsed');
+    arrow.textContent = collapsed ? '▼' : '▲';
+    if (renderer) renderer.resize();
+  });
+
   // Show continue button if a saved game exists
   ui.showSetup(!!localStorage.getItem(SAVE_KEY));
 });
@@ -227,8 +236,6 @@ function refreshUI() {
   const state = game.getState();
   applyFlip();
   renderer.render();
-
-  ui.updatePlayerList(game.players, state.currentPlayer);
 
   ui.updateTurnIndicator(
     game.players[state.currentPlayer].name,

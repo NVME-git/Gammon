@@ -123,39 +123,50 @@ export class BoardRenderer {
     const is2P  = game.numPlayers === 2;
 
     const PAD     = 14;
-    const ZONE_W  = 56;   // width of each BAR or OFF side zone
     const BOARD_H = H - PAD * 2;
     const boardY  = PAD;
     const CY      = boardY + BOARD_H / 2;
-    const TH      = BOARD_H * 0.30;   // diamond half-height (leaves room for dice above)
+    const TH      = BOARD_H * 0.30;
 
-    // ── Zone layout ─────────────────────────────────────────────────────────
-    // 2-player : [P1-OFF][P0-BAR] | 24 pts | [P1-BAR][P0-OFF]
-    // 1-player : [P0-BAR]         | 24 pts | [P0-OFF]
-    const numSide    = is2P ? 2 : 1;
-    const boardStartX = PAD + ZONE_W * numSide;
-    const AVAIL      = W - PAD * 2 - ZONE_W * numSide * 2;
-    const PW         = AVAIL / 24;
-    const boardEndX  = boardStartX + PW * 24;
+    // Board spans full canvas width — no side columns
+    const boardStartX = PAD;
+    const boardEndX   = W - PAD;
+    const PW          = (boardEndX - boardStartX) / 24;
 
     // Flip-aware point column x position
     const pp = i => boardStartX + (this.flipped ? (23 - i) : i) * PW;
 
-    // Zone content definitions (player + type, no position yet)
-    const leftData  = is2P
-      ? [{ player: 1, type: 'off' }, { player: 0, type: 'bar' }]
-      : [{ player: 0, type: 'bar' }];
-    const rightData = is2P
-      ? [{ player: 1, type: 'bar' }, { player: 0, type: 'off' }]
-      : [{ player: 0, type: 'off' }];
+    // ── Strip heights ────────────────────────────────────────────────────────
+    const topStripH    = CY - TH - boardY;
+    const bottomStripH = boardY + BOARD_H - (CY + TH);
 
-    // When flipped, swap left/right content so BAR/OFF stay with the correct edge
-    const leftContent  = this.flipped ? rightData : leftData;
-    const rightContent = this.flipped ? leftData  : rightData;
+    // ── Horizontal zone layout ───────────────────────────────────────────────
+    // Zones live in the top / bottom strips, at the left and right ends.
+    //   Top strip    = player who moves LEFTWARD  (unflipped: P1; flipped: P0)
+    //   Bottom strip = player who moves RIGHTWARD (unflipped: P0; flipped: P1)
+    //
+    //   Top strip  :  [OFF at left]  ·· dice ··  [BAR at right]
+    //   Bottom strip: [BAR at left]  ·· roll ··  [OFF at right]
+    //
+    // Entry (BAR) is on the side the player enters from; exit (OFF) on the
+    // side they move toward — consistent regardless of flip state.
+    const ZW = Math.min(80, topStripH * 1.05, bottomStripH * 1.05);
 
-    const leftZones  = leftContent.map( (d, k) => ({ ...d, x: PAD          + k * ZONE_W }));
-    const rightZones = rightContent.map((d, k) => ({ ...d, x: boardEndX    + k * ZONE_W }));
-    const allZones   = [...leftZones, ...rightZones];
+    const topPlayer    = this.flipped ? 0 : 1;   // left-moving
+    const bottomPlayer = this.flipped ? 1 : 0;   // right-moving
+
+    const allZones = is2P ? [
+      // top strip
+      { player: topPlayer,    type: 'off', x: boardStartX,        y: boardY,  w: ZW, h: topStripH },
+      { player: topPlayer,    type: 'bar', x: boardEndX - ZW,     y: boardY,  w: ZW, h: topStripH },
+      // bottom strip
+      { player: bottomPlayer, type: 'bar', x: boardStartX,        y: CY + TH, w: ZW, h: bottomStripH },
+      { player: bottomPlayer, type: 'off', x: boardEndX - ZW,     y: CY + TH, w: ZW, h: bottomStripH },
+    ] : [
+      // Unigammon: P0 only — BAR in bottom-left, OFF in bottom-right
+      { player: 0, type: 'bar', x: boardStartX,    y: CY + TH, w: ZW, h: bottomStripH },
+      { player: 0, type: 'off', x: boardEndX - ZW, y: CY + TH, w: ZW, h: bottomStripH },
+    ];
 
     // ── Board background ─────────────────────────────────────────────────────
     ctx.fillStyle = theme.board;
@@ -188,20 +199,20 @@ export class BoardRenderer {
 
       ctx.fillStyle = col;
       ctx.beginPath();
-      ctx.moveTo(pcx,     CY - TH);  // top tip
-      ctx.lineTo(px + PW, CY);       // right (widest — on the axis)
-      ctx.lineTo(pcx,     CY + TH);  // bottom tip
-      ctx.lineTo(px,      CY);       // left (widest — on the axis)
+      ctx.moveTo(pcx,     CY - TH);
+      ctx.lineTo(px + PW, CY);
+      ctx.lineTo(pcx,     CY + TH);
+      ctx.lineTo(px,      CY);
       ctx.closePath();
       ctx.fill();
 
-      // Point numbers — top tip: forward order; bottom tip: reversed order
+      // Point numbers — top: forward order; bottom: reversed
       ctx.fillStyle    = labelColor;
       ctx.font         = `bold ${Math.max(8, Math.floor(PW * 0.34))}px Arial`;
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'alphabetic';
-      ctx.fillText(i + 1,  pcx, CY - TH + 13);   // top
-      ctx.fillText(24 - i, pcx, CY + TH - 4);     // bottom (reversed)
+      ctx.fillText(i + 1,  pcx, CY - TH + 13);
+      ctx.fillText(24 - i, pcx, CY + TH - 4);
 
       this._pointAreas.push({ x: px, y: boardY, w: PW, h: BOARD_H, idx: i });
     }
@@ -211,81 +222,99 @@ export class BoardRenderer {
     for (let i = 0; i < 24; i++) {
       const pt = state.points[i];
       if (pt.count === 0) continue;
-
       const px  = pp(i);
       const pcx = px + PW / 2;
-
       for (let s = 0; s < pt.count; s++) {
-        // Centre the entire stack around CY
         const offset = (s - (pt.count - 1) / 2) * (CR * 2 + 1);
         this._drawChecker(pcx, CY + offset, CR, pt.player, s, pt.count, theme);
-      }
-    }
-
-    // ── Side zones: BAR and OFF, colour-coded per player ─────────────────────
-    const ZCR = Math.min(ZONE_W / 2 - 4, 12);
-    for (const zone of allZones) {
-      if (zone.player >= game.numPlayers) continue;
-
-      const pColor = game.players[zone.player].color;
-      const count  = zone.type === 'bar'
-        ? state.bar[zone.player]
-        : state.borneOff[zone.player];
-
-      // Player-coloured tinted background
-      ctx.fillStyle = pColor + '28';
-      ctx.fillRect(zone.x, boardY, ZONE_W, BOARD_H);
-
-      // Player-coloured border
-      ctx.save();
-      ctx.strokeStyle = pColor;
-      ctx.lineWidth   = 1.5;
-      ctx.globalAlpha = 0.45;
-      ctx.strokeRect(zone.x + 1, boardY + 1, ZONE_W - 2, BOARD_H - 2);
-      ctx.restore();
-
-      // Labels
-      ctx.fillStyle    = pColor;
-      ctx.font         = 'bold 9px Arial';
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText(`P${zone.player + 1}`, zone.x + ZONE_W / 2, boardY + 5);
-      ctx.fillText(zone.type === 'bar' ? 'BAR' : 'OFF', zone.x + ZONE_W / 2, boardY + 16);
-      ctx.textBaseline = 'alphabetic';
-
-      // Count badge
-      if (count > 0) {
-        ctx.fillStyle = 'rgba(255,255,255,0.45)';
-        ctx.font      = 'bold 10px Arial';
-        ctx.fillText(`×${count}`, zone.x + ZONE_W / 2, boardY + 31);
-      }
-
-      // Checker stack inside zone
-      for (let i = 0; i < count; i++) {
-        const zy = boardY + 38 + i * (ZCR * 2 + 2) + ZCR;
-        if (zy + ZCR > boardY + BOARD_H - 6) break;
-        this._drawChecker(zone.x + ZONE_W / 2, zy, ZCR, zone.player, i, count, theme);
-      }
-
-      // Register hit areas
-      if (zone.type === 'bar') {
-        this._barAreas.push({ x: zone.x, y: boardY, w: ZONE_W, h: BOARD_H });
-      } else {
-        this._bearAreas.push({ x: zone.x, y: boardY, w: ZONE_W, h: BOARD_H });
       }
     }
 
     // ── Chevrons showing each player's movement direction ────────────────────
     this._drawChevrons(game, boardStartX, boardEndX, boardY, CY, TH, BOARD_H);
 
-    // ── Highlights (drawn last, transparent overlay over everything) ──────────
-    this._drawLinearHighlights(state, boardStartX, PW, allZones, ZONE_W, BOARD_H, boardY, theme, this.flipped);
+    // ── BAR / OFF zone boxes in the strips ───────────────────────────────────
+    for (const zone of allZones) {
+      if (zone.player >= game.numPlayers) continue;
+      const pColor = game.players[zone.player].color;
+      const pName  = game.players[zone.player].name;
+      const count  = zone.type === 'bar'
+        ? state.bar[zone.player]
+        : state.borneOff[zone.player];
+      this._drawZoneBox(ctx, zone, count, pName, pColor, theme);
+      if (zone.type === 'bar') {
+        this._barAreas.push({ x: zone.x, y: zone.y, w: zone.w, h: zone.h });
+      } else {
+        this._bearAreas.push({ x: zone.x, y: zone.y, w: zone.w, h: zone.h });
+      }
+    }
 
-    // ── Dice drawn in the top free area ──────────────────────────────────────
-    this._drawDiceOnCanvas(state, boardStartX, boardEndX, boardY, CY, TH);
+    // ── Highlights ────────────────────────────────────────────────────────────
+    this._drawLinearHighlights(state, boardStartX, PW, allZones, theme, this.flipped);
 
-    // ── Roll button drawn in the bottom free area ─────────────────────────────
-    this._drawRollButton(state, boardStartX, boardEndX, CY, TH, boardY, BOARD_H);
+    // ── Dice in the top strip (centred between zones) ────────────────────────
+    this._drawDiceOnCanvas(state, boardStartX, boardEndX, boardY, CY, TH, ZW);
+
+    // ── Roll button in the bottom strip ──────────────────────────────────────
+    this._drawRollButton(state, boardStartX, boardEndX, CY, TH, boardY, BOARD_H, ZW);
+  }
+
+  // Draw a BAR or OFF zone box inside a strip
+  _drawZoneBox(ctx, zone, count, playerName, playerColor, theme) {
+    const { x, y, w, h, type } = zone;
+    const cx = x + w / 2;
+
+    // Tinted background
+    ctx.fillStyle = playerColor + '28';
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 6);
+    ctx.fill();
+
+    // Coloured border
+    ctx.save();
+    ctx.strokeStyle = playerColor;
+    ctx.lineWidth   = 1.5;
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 6);
+    ctx.stroke();
+    ctx.restore();
+
+    // Text layout
+    const nameSize  = Math.max(7,  Math.floor(h * 0.13));
+    const labelSize = Math.max(8,  Math.floor(h * 0.15));
+    const countSize = Math.max(9,  Math.floor(h * 0.17));
+    ctx.fillStyle    = playerColor;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'top';
+
+    const shortName = playerName.length > 8 ? playerName.slice(0, 7) + '…' : playerName;
+    ctx.font = `bold ${nameSize}px Arial`;
+    ctx.fillText(shortName, cx, y + 3);
+
+    ctx.font = `bold ${labelSize}px Arial`;
+    ctx.fillText(type === 'bar' ? 'BAR' : 'OFF', cx, y + 3 + nameSize + 2);
+
+    if (count > 0) {
+      ctx.font = `bold ${countSize}px Arial`;
+      ctx.fillText(`×${count}`, cx, y + 3 + nameSize + 2 + labelSize + 2);
+    }
+
+    // Small checker dots at bottom of box
+    const dotR = Math.min(5, (h - nameSize - labelSize - countSize - 20) / 2, w / 8);
+    if (dotR >= 3 && count > 0) {
+      const maxDots = Math.floor(w / (dotR * 2 + 3));
+      const displayCount = Math.min(count, maxDots);
+      const dotsW  = displayCount * (dotR * 2 + 3) - 3;
+      const dotX0  = cx - dotsW / 2 + dotR;
+      const dotY   = y + h - dotR - 4;
+      for (let i = 0; i < displayCount; i++) {
+        ctx.beginPath();
+        ctx.arc(dotX0 + i * (dotR * 2 + 3), dotY, dotR, 0, Math.PI * 2);
+        ctx.fillStyle = playerColor;
+        ctx.fill();
+      }
+    }
   }
 
   _drawChevrons(game, boardStartX, boardEndX, boardY, CY, TH, BOARD_H) {
@@ -342,7 +371,7 @@ export class BoardRenderer {
     ctx.restore();
   }
 
-  _drawRollButton(state, boardStartX, boardEndX, CY, TH, boardY, BOARD_H) {
+  _drawRollButton(state, boardStartX, boardEndX, CY, TH, boardY, BOARD_H, ZW = 0) {
     const ctx     = this.ctx;
     const theme   = this._theme();
     const isDark  = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -350,8 +379,11 @@ export class BoardRenderer {
 
     const stripH  = (boardY + BOARD_H) - (CY + TH);
     const btnH    = Math.min(stripH - 10, 54);
-    const btnW    = Math.min((boardEndX - boardStartX) * 0.38, 220);
-    const btnX    = (boardStartX + boardEndX) / 2 - btnW / 2;
+    // Keep button between the two zone boxes
+    const innerLeft  = boardStartX + ZW + 8;
+    const innerRight = boardEndX   - ZW - 8;
+    const btnW    = Math.min(innerRight - innerLeft, 220);
+    const btnX    = (innerLeft + innerRight) / 2 - btnW / 2;
     const btnY    = (CY + TH) + (stripH - btnH) / 2;
     const radius  = btnH / 2;
 
@@ -389,17 +421,19 @@ export class BoardRenderer {
     ctx.globalAlpha = 1;
   }
 
-  _drawDiceOnCanvas(state, boardStartX, boardEndX, boardY, CY, TH) {
+  _drawDiceOnCanvas(state, boardStartX, boardEndX, boardY, CY, TH, ZW = 0) {
     if (state.dice.length === 0) return;
 
     const ctx    = this.ctx;
     const theme  = this._theme();
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
+    const playerColor = this.game.players[state.currentPlayer]?.color || 'gold';
+
     const topAreaH = (CY - TH) - boardY - 10;
     if (topAreaH < 22) return;
 
-    const dieSize = topAreaH - 6;   // fill the full available height
+    const dieSize = topAreaH - 6;
     const gap     = Math.max(6, dieSize * 0.15);
 
     const isDouble = state.dice.length === 2 && state.dice[0] === state.dice[1];
@@ -440,7 +474,7 @@ export class BoardRenderer {
       ctx.fill();
 
       // Border — bright yellow for active, muted for used
-      ctx.strokeStyle = used ? theme.boardBorder : 'rgba(255,215,50,0.95)';
+      ctx.strokeStyle = used ? theme.boardBorder : playerColor;
       ctx.lineWidth   = used ? 1 : 2.5;
       ctx.beginPath();
       ctx.roundRect(x, y, dieSize, dieSize, 9);
@@ -461,7 +495,7 @@ export class BoardRenderer {
     });
   }
 
-  _drawLinearHighlights(state, boardStartX, PW, zones, ZONE_W, BOARD_H, boardY, theme, flipped) {
+  _drawLinearHighlights(state, boardStartX, PW, zones, theme, flipped) {
     const ctx = this.ctx;
     const p   = state.currentPlayer;
     const pp  = i => boardStartX + (flipped ? (23 - i) : i) * PW;
@@ -469,20 +503,20 @@ export class BoardRenderer {
     if (state.selectedPoint !== null) {
       ctx.fillStyle = theme.selected;
       if (state.selectedPoint === 'bar') {
-        const barZone = zones.find(z => z.type === 'bar' && z.player === p);
-        if (barZone) ctx.fillRect(barZone.x, boardY, ZONE_W, BOARD_H);
+        const z = zones.find(z => z.type === 'bar' && z.player === p);
+        if (z) ctx.fillRect(z.x, z.y, z.w, z.h);
       } else {
-        ctx.fillRect(pp(state.selectedPoint), boardY, PW, BOARD_H);
+        ctx.fillRect(pp(state.selectedPoint), 0, PW, this.canvas.height);
       }
     }
 
     for (const vm of state.validMoves) {
       ctx.fillStyle = theme.validMove;
       if (vm === 'bearoff') {
-        const offZone = zones.find(z => z.type === 'off' && z.player === p);
-        if (offZone) ctx.fillRect(offZone.x, boardY, ZONE_W, BOARD_H);
+        const z = zones.find(z => z.type === 'off' && z.player === p);
+        if (z) ctx.fillRect(z.x, z.y, z.w, z.h);
       } else {
-        ctx.fillRect(pp(vm), boardY, PW, BOARD_H);
+        ctx.fillRect(pp(vm), 0, PW, this.canvas.height);
       }
     }
   }
