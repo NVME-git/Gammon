@@ -150,22 +150,30 @@ export class BoardRenderer {
     //
     // Entry (BAR) is on the side the player enters from; exit (OFF) on the
     // side they move toward — consistent regardless of flip state.
+    // Number labels sit just outside the diamond tips; leave room for them
+    const numFontH = Math.max(8, Math.floor(PW * 0.34));
+    const numGap   = numFontH + 7;   // font height + breathing room
+
     const ZW = Math.min(80, topStripH * 1.05, bottomStripH * 1.05);
 
     const topPlayer    = this.flipped ? 0 : 1;   // left-moving
     const bottomPlayer = this.flipped ? 1 : 0;   // right-moving
 
+    // Zones are inset from the diamond tips by numGap so they never overlap the numbers
+    const topZoneH    = topStripH    - numGap;
+    const botZoneY    = CY + TH      + numGap;
+    const botZoneH    = bottomStripH - numGap;
+
     const allZones = is2P ? [
-      // top strip
-      { player: topPlayer,    type: 'off', x: boardStartX,        y: boardY,  w: ZW, h: topStripH },
-      { player: topPlayer,    type: 'bar', x: boardEndX - ZW,     y: boardY,  w: ZW, h: topStripH },
-      // bottom strip
-      { player: bottomPlayer, type: 'bar', x: boardStartX,        y: CY + TH, w: ZW, h: bottomStripH },
-      { player: bottomPlayer, type: 'off', x: boardEndX - ZW,     y: CY + TH, w: ZW, h: bottomStripH },
+      // top strip  (anchored at boardY, stops before the number row)
+      { player: topPlayer,    type: 'off', x: boardStartX,    y: boardY,  w: ZW, h: topZoneH },
+      { player: topPlayer,    type: 'bar', x: boardEndX - ZW, y: boardY,  w: ZW, h: topZoneH },
+      // bottom strip (starts after the number row)
+      { player: bottomPlayer, type: 'bar', x: boardStartX,    y: botZoneY, w: ZW, h: botZoneH },
+      { player: bottomPlayer, type: 'off', x: boardEndX - ZW, y: botZoneY, w: ZW, h: botZoneH },
     ] : [
-      // Unigammon: P0 only — BAR in bottom-left, OFF in bottom-right
-      { player: 0, type: 'bar', x: boardStartX,    y: CY + TH, w: ZW, h: bottomStripH },
-      { player: 0, type: 'off', x: boardEndX - ZW, y: CY + TH, w: ZW, h: bottomStripH },
+      { player: 0, type: 'bar', x: boardStartX,    y: botZoneY, w: ZW, h: botZoneH },
+      { player: 0, type: 'off', x: boardEndX - ZW, y: botZoneY, w: ZW, h: botZoneH },
     ];
 
     // ── Board background ─────────────────────────────────────────────────────
@@ -281,29 +289,34 @@ export class BoardRenderer {
     ctx.stroke();
     ctx.restore();
 
-    // Text layout — no player name, just type label + count
-    const labelSize = Math.max(9,  Math.floor(h * 0.18));
-    const countSize = Math.max(9,  Math.floor(h * 0.17));
+    // Text — type label + optional count, centred vertically in the box
+    const labelSize   = Math.max(9,  Math.floor(h * 0.22));
+    const countSize   = Math.max(8,  Math.floor(h * 0.17));
+    const textGroupH  = labelSize + (count > 0 ? countSize + 3 : 0);
+    const textStartY  = y + (h - textGroupH) / 2;
+
     ctx.fillStyle    = playerColor;
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'top';
 
     ctx.font = `bold ${labelSize}px Arial`;
-    ctx.fillText(type === 'bar' ? 'BAR' : 'OFF', cx, y + 4);
+    ctx.fillText(type === 'bar' ? 'BAR' : 'OFF', cx, textStartY);
 
     if (count > 0) {
       ctx.font = `bold ${countSize}px Arial`;
-      ctx.fillText(`×${count}`, cx, y + 4 + labelSize + 2);
+      ctx.fillText(`×${count}`, cx, textStartY + labelSize + 3);
     }
 
-    // Small checker dots
-    const dotR = Math.min(5, (h - labelSize - countSize - 20) / 2, w / 8);
+    // Small checker dots (only if there's space below the text group)
+    const dotAreaTop = textStartY + textGroupH + 4;
+    const dotAreaH   = y + h - dotAreaTop - 2;
+    const dotR = Math.min(5, dotAreaH / 2, w / 8);
     if (dotR >= 3 && count > 0) {
-      const maxDots = Math.floor(w / (dotR * 2 + 3));
+      const maxDots      = Math.floor(w / (dotR * 2 + 3));
       const displayCount = Math.min(count, maxDots);
-      const dotsW  = displayCount * (dotR * 2 + 3) - 3;
-      const dotX0  = cx - dotsW / 2 + dotR;
-      const dotY   = y + h - dotR - 4;
+      const dotsW = displayCount * (dotR * 2 + 3) - 3;
+      const dotX0 = cx - dotsW / 2 + dotR;
+      const dotY  = dotAreaTop + dotR;
       for (let i = 0; i < displayCount; i++) {
         ctx.beginPath();
         ctx.arc(dotX0 + i * (dotR * 2 + 3), dotY, dotR, 0, Math.PI * 2);
@@ -426,10 +439,10 @@ export class BoardRenderer {
 
     const playerColor = this.game.players[state.currentPlayer]?.color || 'gold';
 
-    const topAreaH = (CY - TH) - boardY - 10;
+    const topAreaH = (CY - TH) - boardY - 5;
     if (topAreaH < 22) return;
 
-    const dieSize = topAreaH - 6;
+    const dieSize = topAreaH - 2;
     const gap     = Math.max(6, dieSize * 0.15);
 
     const isDouble = state.dice.length === 2 && state.dice[0] === state.dice[1];
