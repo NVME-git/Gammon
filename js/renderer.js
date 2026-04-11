@@ -206,13 +206,14 @@ export class BoardRenderer {
       ctx.closePath();
       ctx.fill();
 
-      // Point numbers — top: forward order; bottom: reversed
+      // Point numbers — placed just outside the diamond tips, into the strip
       ctx.fillStyle    = labelColor;
       ctx.font         = `bold ${Math.max(8, Math.floor(PW * 0.34))}px Arial`;
       ctx.textAlign    = 'center';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText(i + 1,  pcx, CY - TH + 13);
-      ctx.fillText(24 - i, pcx, CY + TH - 4);
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(i + 1,  pcx, CY - TH - 4);   // above top tip
+      ctx.textBaseline = 'top';
+      ctx.fillText(24 - i, pcx, CY + TH + 4);   // below bottom tip
 
       this._pointAreas.push({ x: px, y: boardY, w: PW, h: BOARD_H, idx: i });
     }
@@ -280,28 +281,23 @@ export class BoardRenderer {
     ctx.stroke();
     ctx.restore();
 
-    // Text layout
-    const nameSize  = Math.max(7,  Math.floor(h * 0.13));
-    const labelSize = Math.max(8,  Math.floor(h * 0.15));
+    // Text layout — no player name, just type label + count
+    const labelSize = Math.max(9,  Math.floor(h * 0.18));
     const countSize = Math.max(9,  Math.floor(h * 0.17));
     ctx.fillStyle    = playerColor;
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'top';
 
-    const shortName = playerName.length > 8 ? playerName.slice(0, 7) + '…' : playerName;
-    ctx.font = `bold ${nameSize}px Arial`;
-    ctx.fillText(shortName, cx, y + 3);
-
     ctx.font = `bold ${labelSize}px Arial`;
-    ctx.fillText(type === 'bar' ? 'BAR' : 'OFF', cx, y + 3 + nameSize + 2);
+    ctx.fillText(type === 'bar' ? 'BAR' : 'OFF', cx, y + 4);
 
     if (count > 0) {
       ctx.font = `bold ${countSize}px Arial`;
-      ctx.fillText(`×${count}`, cx, y + 3 + nameSize + 2 + labelSize + 2);
+      ctx.fillText(`×${count}`, cx, y + 4 + labelSize + 2);
     }
 
-    // Small checker dots at bottom of box
-    const dotR = Math.min(5, (h - nameSize - labelSize - countSize - 20) / 2, w / 8);
+    // Small checker dots
+    const dotR = Math.min(5, (h - labelSize - countSize - 20) / 2, w / 8);
     if (dotR >= 3 && count > 0) {
       const maxDots = Math.floor(w / (dotR * 2 + 3));
       const displayCount = Math.min(count, maxDots);
