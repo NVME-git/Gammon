@@ -95,12 +95,6 @@ function playAgain() {
 }
 
 function goToMenu() {
-  // Save in-progress game (skip if already over)
-  if (game && game.phase !== 'gameover') {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(game.exportSave()));
-  } else {
-    localStorage.removeItem(SAVE_KEY);
-  }
   game     = null;
   renderer = null;
   ui.showSetup(!!localStorage.getItem(SAVE_KEY));
@@ -247,6 +241,13 @@ function refreshUI() {
   ui.setUndoButtonState(game.canUndo());
 
   if (game.mode === 'unigammon') showTutorialHint();
+
+  // Auto-save after every action; clear save once game is over
+  if (state.phase === 'gameover') {
+    localStorage.removeItem(SAVE_KEY);
+  } else {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(game.exportSave()));
+  }
 }
 
 // ─── Win screen ───────────────────────────────────────────────────────────────
