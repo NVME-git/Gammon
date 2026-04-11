@@ -1,0 +1,29 @@
+{
+  "name": "gammon",
+  "version": "1.0.0",
+  "description": "Backgammon between enemies",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NVME-git/Gammon.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/NVME-git/Gammon/issues"
+  },
+  "homepage": "https://github.com/NVME-git/Gammon#readme",
+  "dependencies": {
+    "pixi.js": "^8.17.1"
+  },
+  "devDependencies": {
+    "vite": "^8.0.8"
+  }
+}

@@ -1,6 +1,6 @@
 import { UIManager }      from './ui.js';
 import { BackgammonGame } from './game.js';
-import { BoardRenderer }  from './renderer.js';
+import { BoardRenderer }  from './pixi-renderer.js';
 import { MODE_INFO }      from './constants.js';
 
 // ─── State ───────────────────────────────────────────────────────────────────

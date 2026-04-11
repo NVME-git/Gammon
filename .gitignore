@@ -1,1 +1,3 @@
 .rocky
+node_modules/
+dist/
