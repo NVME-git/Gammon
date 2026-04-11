@@ -539,17 +539,21 @@ export class BoardRenderer {
     const W     = this.canvas.width;
     const H     = this.canvas.height;
     const theme = this._theme();
-    const state = this.game.getState();
+    const game  = this.game;
+    const state = game.getState();
+
+    const HUD_H = Math.min(64, H * 0.14);
+    const boardH = H - HUD_H;
 
     const cx = W / 2;
-    const cy = H / 2 + 10;
-    const R  = Math.min(W, H) * 0.42;
+    const cy = boardH / 2;
+    const R  = Math.min(W, boardH) * 0.40;
 
     // Triangle vertices (equilateral, flat-bottom)
     const verts = [
-      { x: cx,                          y: cy - R       },    // top
-      { x: cx + R * Math.sin(Math.PI * 2 / 3),  y: cy - R * Math.cos(Math.PI * 2 / 3) },   // bottom-right
-      { x: cx + R * Math.sin(Math.PI * 4 / 3),  y: cy - R * Math.cos(Math.PI * 4 / 3) },   // bottom-left
+      { x: cx,                                          y: cy - R },
+      { x: cx + R * Math.sin(Math.PI * 2 / 3),  y: cy - R * Math.cos(Math.PI * 2 / 3) },
+      { x: cx + R * Math.sin(Math.PI * 4 / 3),  y: cy - R * Math.cos(Math.PI * 4 / 3) },
     ];
 
     // Board background
@@ -564,47 +568,47 @@ export class BoardRenderer {
     ctx.lineWidth   = 3;
     ctx.stroke();
 
-    // Center bar circle
+    // Centre bar circle — shows per-player BAR counts
+    const barR = R * 0.18;
     ctx.fillStyle = theme.barArea;
     ctx.beginPath();
-    ctx.arc(cx, cy, R * 0.18, 0, Math.PI * 2);
+    ctx.arc(cx, cy, barR, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = theme.boardBorder;
     ctx.lineWidth   = 2;
     ctx.stroke();
-    ctx.fillStyle = theme.subtext || '#888';
-    ctx.font      = 'bold 11px Arial';
-    ctx.textAlign = 'center';
+    ctx.fillStyle    = theme.subtext || '#888';
+    ctx.font         = 'bold 9px Arial';
+    ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('BAR', cx, cy);
     ctx.textBaseline = 'alphabetic';
-    this._barAreas.push({ x: cx - R * 0.18, y: cy - R * 0.18, w: R * 0.36, h: R * 0.36 });
+    this._barAreas.push({ x: cx - barR, y: cy - barR, w: barR * 2, h: barR * 2 });
 
     // Compute 24 point positions — 8 per side
-    const MARGIN  = 0.12; // inset from vertex
+    const MARGIN  = 0.12;
     const SPACING = (1 - 2 * MARGIN) / 7;
-    const pts     = [];   // indexed 0-23
+    const pts     = [];
 
     for (let side = 0; side < 3; side++) {
       const vA = verts[side];
       const vB = verts[(side + 1) % 3];
       for (let i = 0; i < 8; i++) {
         const t  = MARGIN + i * SPACING;
-        const px = vA.x + (vB.x - vA.x) * t;
-        const py = vA.y + (vB.y - vA.y) * t;
-        pts.push({ cx: px, cy: py, idx: side * 8 + i });
+        pts.push({
+          cx:  vA.x + (vB.x - vA.x) * t,
+          cy:  vA.y + (vB.y - vA.y) * t,
+          idx: side * 8 + i,
+        });
       }
     }
 
-    const PR = Math.min(W, H) * 0.038;   // point/checker radius
+    const PR = Math.min(W, boardH) * 0.036;
 
-    // Draw each point
+    // Point shapes
     const colors = [theme.triangle1, theme.triangle2];
     for (const pt of pts) {
-      const q     = Math.floor(pt.idx / 4);
-      const color = colors[q % 2];
-
-      // Draw a small triangle pointing towards centre
+      const color = colors[Math.floor(pt.idx / 4) % 2];
       const angle = Math.atan2(cy - pt.cy, cx - pt.cx);
       const len   = PR * 2.6;
       ctx.fillStyle = color;
@@ -615,10 +619,9 @@ export class BoardRenderer {
       ctx.closePath();
       ctx.fill();
 
-      // Label
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.font      = `bold ${Math.floor(PR * 0.85)}px Arial`;
-      ctx.textAlign = 'center';
+      ctx.fillStyle    = 'rgba(255,255,255,0.4)';
+      ctx.font         = `bold ${Math.floor(PR * 0.85)}px Arial`;
+      ctx.textAlign    = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(pt.idx + 1, pt.cx, pt.cy);
       ctx.textBaseline = 'alphabetic';
@@ -626,48 +629,77 @@ export class BoardRenderer {
       this._pointCenters.push({ cx: pt.cx, cy: pt.cy, r: PR * 1.8, idx: pt.idx });
     }
 
-    // Draw checkers
+    // Checkers on points
     for (const pt of pts) {
       const sp = state.points[pt.idx];
       if (sp.count === 0) continue;
       const angle = Math.atan2(cy - pt.cy, cx - pt.cx);
       for (let s = 0; s < sp.count; s++) {
-        const dist  = PR * 1.8 + s * (PR * 2 + 2);
-        const ccx   = pt.cx + dist * Math.cos(angle);
-        const ccy   = pt.cy + dist * Math.sin(angle);
-        this._drawChecker(ccx, ccy, PR, sp.player, s, sp.count, theme);
+        const dist = PR * 1.8 + s * (PR * 2 + 2);
+        this._drawChecker(
+          pt.cx + dist * Math.cos(angle),
+          pt.cy + dist * Math.sin(angle),
+          PR, sp.player, s, sp.count, theme
+        );
       }
     }
 
-    // Bar checkers
-    for (let p = 0; p < this.game.numPlayers; p++) {
+    // Bar checkers — radiate outward from centre, one direction per player
+    for (let p = 0; p < game.numPlayers; p++) {
       const count = state.bar[p];
       if (count === 0) continue;
-      const angle = (p / this.game.numPlayers) * Math.PI * 2;
+      const angle = (p / game.numPlayers) * Math.PI * 2 - Math.PI / 2;
       for (let s = 0; s < count; s++) {
-        const dist = R * 0.10 + s * (PR * 2 + 2);
-        const bcx  = cx + dist * Math.cos(angle);
-        const bcy  = cy + dist * Math.sin(angle);
-        this._drawChecker(bcx, bcy, PR, p, s, count, theme);
+        const dist = barR * 0.5 + s * (PR * 2 + 2);
+        this._drawChecker(
+          cx + dist * Math.cos(angle),
+          cy + dist * Math.sin(angle),
+          PR * 0.75, p, s, count, theme
+        );
       }
     }
 
-    // Bearing-off labels at vertices (and register hit areas)
-    for (let p = 0; p < this.game.numPlayers; p++) {
-      const homeVertex = verts[p];
-      const count      = state.borneOff[p];
-      const color      = this.game.players[p].color;
-      ctx.fillStyle    = color;
-      ctx.font         = 'bold 12px Arial';
-      ctx.textAlign    = 'center';
-      ctx.fillText(`P${p + 1} off: ${count}`, homeVertex.x, homeVertex.y - 16);
+    // Bear-off zones at each vertex — coloured pill with player name + count
+    const bearZoneW = Math.min(84, R * 0.55);
+    const bearZoneH = Math.min(32, R * 0.22);
+    for (let p = 0; p < game.numPlayers; p++) {
+      const v     = verts[p];
+      const color = game.players[p].color;
+      const name  = game.players[p].name;
+      const count = state.borneOff[p];
+      // Push zone outward from vertex away from centre
+      const outAngle = Math.atan2(v.y - cy, v.x - cx);
+      const zx = v.x + Math.cos(outAngle) * (R * 0.12) - bearZoneW / 2;
+      const zy = v.y + Math.sin(outAngle) * (R * 0.12) - bearZoneH / 2;
 
-      // Register bear-off click area near vertex
-      this._bearAreas.push({ x: homeVertex.x - 36, y: homeVertex.y - 30, w: 72, h: 28 });
+      ctx.fillStyle = color + '28';
+      ctx.beginPath();
+      ctx.roundRect(zx, zy, bearZoneW, bearZoneH, bearZoneH / 2);
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = 1.5;
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.roundRect(zx, zy, bearZoneW, bearZoneH, bearZoneH / 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      const short = name.length > 7 ? name.slice(0, 6) + '…' : name;
+      ctx.fillStyle    = color;
+      ctx.font         = `bold ${Math.max(8, bearZoneH * 0.32)}px Arial`;
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${short}  OFF ×${count}`, zx + bearZoneW / 2, zy + bearZoneH / 2);
+      ctx.textBaseline = 'alphabetic';
+
+      this._bearAreas.push({ x: zx, y: zy, w: bearZoneW, h: bearZoneH });
     }
 
     // Highlights
     this._drawPolyHighlights(state, pts, PR, theme, cx, cy, verts);
+
+    // HUD: dice + roll button
+    this._drawPolyHUD(state, W, H, HUD_H);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -679,20 +711,30 @@ export class BoardRenderer {
     const W     = this.canvas.width;
     const H     = this.canvas.height;
     const theme = this._theme();
-    const state = this.game.getState();
+    const game  = this.game;
+    const state = game.getState();
 
-    const cx      = W / 2;
-    const cy      = H / 2;
-    const armLen  = Math.min(W, H) * 0.38;
-    const armW    = Math.min(W, H) * 0.18;
+    const HUD_H  = Math.min(64, H * 0.14);
+    const boardH = H - HUD_H;
+
+    const cx     = W / 2;
+    const cy     = boardH / 2;
+    const armLen = Math.min(W, boardH) * 0.36;
+    const armW   = Math.min(W, boardH) * 0.17;
+
+    // Arm directions: bottom(P0), right(P1), top(P2), left(P3)
+    const armDefs = [
+      { dx:  0, dy:  1 },
+      { dx:  1, dy:  0 },
+      { dx:  0, dy: -1 },
+      { dx: -1, dy:  0 },
+    ];
 
     // Draw cross shape
     ctx.fillStyle = theme.board;
-    // Horizontal bar
     ctx.beginPath();
     ctx.roundRect(cx - armLen - armW / 2, cy - armW / 2, armLen * 2 + armW, armW, 8);
     ctx.fill();
-    // Vertical bar
     ctx.beginPath();
     ctx.roundRect(cx - armW / 2, cy - armLen - armW / 2, armW, armLen * 2 + armW, 8);
     ctx.fill();
@@ -705,7 +747,7 @@ export class BoardRenderer {
     ctx.roundRect(cx - armW / 2, cy - armLen - armW / 2, armW, armLen * 2 + armW, 8);
     ctx.stroke();
 
-    // Center bar circle
+    // Centre bar circle
     const barR = armW * 0.32;
     ctx.fillStyle = theme.barArea;
     ctx.beginPath();
@@ -715,47 +757,33 @@ export class BoardRenderer {
     ctx.lineWidth   = 2;
     ctx.stroke();
     ctx.fillStyle    = theme.subtext || '#888';
-    ctx.font         = 'bold 10px Arial';
+    ctx.font         = 'bold 9px Arial';
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('BAR', cx, cy);
     ctx.textBaseline = 'alphabetic';
     this._barAreas.push({ x: cx - barR, y: cy - barR, w: barR * 2, h: barR * 2 });
 
-    // Arm directions: bottom(0), right(1), top(2), left(3)
-    // Each arm has 6 points going outward from center
-    const PR = armW * 0.14;
-    const armDefs = [
-      { dx:  0, dy:  1 },   // bottom arm  → points 0-5
-      { dx:  1, dy:  0 },   // right arm   → points 6-11
-      { dx:  0, dy: -1 },   // top arm     → points 12-17
-      { dx: -1, dy:  0 },   // left arm    → points 18-23
-    ];
+    const PR   = armW * 0.14;
+    const STEP = armLen / 6.5;
 
-    const pts = [];   // { cx, cy, idx }
-    const STEP = (armLen) / 6.5;
-
+    const pts = [];
     for (let arm = 0; arm < 4; arm++) {
       const { dx, dy } = armDefs[arm];
       for (let i = 0; i < 6; i++) {
         const dist = barR + PR * 1.4 + i * STEP;
-        pts.push({
-          cx:  cx + dx * dist,
-          cy:  cy + dy * dist,
-          idx: arm * 6 + i,
-        });
+        pts.push({ cx: cx + dx * dist, cy: cy + dy * dist, idx: arm * 6 + i });
       }
     }
 
+    // Point shapes
     const colors = [theme.triangle1, theme.triangle2];
     for (const pt of pts) {
-      const arm   = Math.floor(pt.idx / 6);
-      const color = colors[arm % 2];
+      const arm     = Math.floor(pt.idx / 6);
+      const color   = colors[arm % 2];
       const { dx, dy } = armDefs[arm];
-      const angle = Math.atan2(dy, dx);
-
-      // Arrowhead triangle pointing outward along arm
-      const len = PR * 2.2;
+      const angle   = Math.atan2(dy, dx);
+      const len     = PR * 2.2;
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.moveTo(pt.cx - PR * Math.sin(angle), pt.cy + PR * Math.cos(angle));
@@ -774,59 +802,204 @@ export class BoardRenderer {
       this._pointCenters.push({ cx: pt.cx, cy: pt.cy, r: PR * 1.8, idx: pt.idx });
     }
 
-    // Checkers
+    // Checkers on points
     for (const pt of pts) {
       const sp = state.points[pt.idx];
       if (sp.count === 0) continue;
-      const arm   = Math.floor(pt.idx / 6);
-      const { dx, dy } = armDefs[arm];
+      const { dx, dy } = armDefs[Math.floor(pt.idx / 6)];
       const angle = Math.atan2(dy, dx);
       for (let s = 0; s < sp.count; s++) {
         const dist = PR * 2 + s * (PR * 2 + 2);
-        const ccx  = pt.cx + dist * Math.cos(angle);
-        const ccy  = pt.cy + dist * Math.sin(angle);
-        this._drawChecker(ccx, ccy, PR, sp.player, s, sp.count, theme);
+        this._drawChecker(pt.cx + dist * Math.cos(angle), pt.cy + dist * Math.sin(angle),
+                          PR, sp.player, s, sp.count, theme);
       }
     }
 
-    // Bar checkers
-    for (let p = 0; p < this.game.numPlayers; p++) {
+    // Bar checkers — one radial direction per player
+    for (let p = 0; p < game.numPlayers; p++) {
       const count = state.bar[p];
       if (count === 0) continue;
       const angle = (p / 4) * Math.PI * 2;
       for (let s = 0; s < count; s++) {
         const dist = barR * 0.5 + s * (PR * 2 + 1);
-        const bcx  = cx + dist * Math.cos(angle);
-        const bcy  = cy + dist * Math.sin(angle);
-        this._drawChecker(bcx, bcy, PR, p, s, count, theme);
+        this._drawChecker(cx + dist * Math.cos(angle), cy + dist * Math.sin(angle),
+                          PR * 0.75, p, s, count, theme);
       }
     }
 
-    // Bearing-off labels at arm tips
-    const tipDist = armLen + armW * 0.7;
+    // Bear-off zones at arm tips — coloured pill with player name + count
+    const tipDist  = armLen + armW * 0.6;
+    const bzW      = Math.min(88, armW * 1.1);
+    const bzH      = Math.min(28, armW * 0.35);
     const bearTips = [];
-    for (let p = 0; p < this.game.numPlayers; p++) {
-      const { dx, dy } = armDefs[p];
-      const tx   = cx + dx * tipDist;
-      const ty   = cy + dy * tipDist;
-      const col  = this.game.players[p].color;
-      ctx.fillStyle = col;
-      ctx.font      = 'bold 11px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(`P${p + 1} off: ${state.borneOff[p]}`, tx, ty);
 
-      // Bear-off area registration
-      this._bearAreas.push({ x: tx - 28, y: ty - 16, w: 56, h: 20 });
+    for (let p = 0; p < game.numPlayers; p++) {
+      const { dx, dy } = armDefs[p];
+      const tx    = cx + dx * tipDist;
+      const ty    = cy + dy * tipDist;
+      const color = game.players[p].color;
+      const name  = game.players[p].name;
+      const count = state.borneOff[p];
+      const zx    = tx - bzW / 2;
+      const zy    = ty - bzH / 2;
+
+      ctx.fillStyle = color + '28';
+      ctx.beginPath();
+      ctx.roundRect(zx, zy, bzW, bzH, bzH / 2);
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = 1.5;
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.roundRect(zx, zy, bzW, bzH, bzH / 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      const short = name.length > 7 ? name.slice(0, 6) + '…' : name;
+      ctx.fillStyle    = color;
+      ctx.font         = `bold ${Math.max(8, bzH * 0.34)}px Arial`;
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${short}  OFF ×${count}`, tx, ty);
+      ctx.textBaseline = 'alphabetic';
+
+      this._bearAreas.push({ x: zx, y: zy, w: bzW, h: bzH });
       bearTips.push({ tx, ty });
     }
 
     // Highlights
     this._drawPolyHighlights(state, pts, PR, theme, cx, cy, null, bearTips, armDefs, armW);
+
+    // HUD: dice + roll button
+    this._drawPolyHUD(state, W, H, HUD_H);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ─── Shared helpers ───────────────────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Dice + roll button strip drawn at the bottom of tri/quad boards.
+   * Also registers _rollArea so canvas clicks reach handleRoll().
+   */
+  _drawPolyHUD(state, W, H, HUD_H) {
+    const ctx     = this.ctx;
+    const theme   = this._theme();
+    const isDark  = document.documentElement.getAttribute('data-theme') === 'dark';
+    const hudY    = H - HUD_H;
+    const midX    = W / 2;
+    const canRoll = state.phase === 'rolling';
+
+    // Background strip
+    ctx.fillStyle = theme.panel || theme.board;
+    ctx.fillRect(0, hudY, W, HUD_H);
+    ctx.strokeStyle = theme.boardBorder;
+    ctx.lineWidth   = 1;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, hudY);
+    ctx.lineTo(W, hudY);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Divider between dice and button
+    ctx.strokeStyle = theme.boardBorder;
+    ctx.lineWidth   = 1;
+    ctx.globalAlpha = 0.3;
+    ctx.beginPath();
+    ctx.moveTo(midX, hudY + 6);
+    ctx.lineTo(midX, hudY + HUD_H - 6);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // ── Dice (left half) ──────────────────────────────────────────────────
+    const playerColor = this.game.players[state.currentPlayer]?.color || 'gold';
+    if (state.dice.length > 0) {
+      const dieSize = Math.min(HUD_H - 12, 44);
+      const gap     = Math.max(5, dieSize * 0.15);
+
+      const isDouble  = state.dice.length === 2 && state.dice[0] === state.dice[1];
+      const display   = isDouble
+        ? [state.dice[0], state.dice[0], state.dice[0], state.dice[0]]
+        : [...state.dice];
+      const remaining = isDouble
+        ? state.movesLeft.filter(v => v === state.dice[0]).length
+        : 0;
+      const mlTrack   = [...state.movesLeft];
+      const faces     = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+      const totalW    = display.length * dieSize + (display.length - 1) * gap;
+      const startX    = midX / 2 - totalW / 2;
+      const startY    = hudY + (HUD_H - dieSize) / 2;
+
+      display.forEach((val, i) => {
+        let used;
+        if (isDouble) {
+          used = i >= remaining;
+        } else {
+          const idx = mlTrack.indexOf(val);
+          used = idx === -1;
+          if (!used) mlTrack.splice(idx, 1);
+        }
+        const x = startX + i * (dieSize + gap);
+
+        ctx.globalAlpha = used ? 0.28 : 1;
+        ctx.fillStyle   = theme.barArea;
+        ctx.beginPath();
+        ctx.roundRect(x, startY, dieSize, dieSize, 7);
+        ctx.fill();
+
+        ctx.strokeStyle = used ? theme.boardBorder : playerColor;
+        ctx.lineWidth   = used ? 1 : 2.5;
+        ctx.beginPath();
+        ctx.roundRect(x, startY, dieSize, dieSize, 7);
+        ctx.stroke();
+
+        ctx.fillStyle    = isDark ? '#fff' : '#111';
+        ctx.font         = `${Math.floor(dieSize * 0.82)}px Arial`;
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'alphabetic';
+        const face    = faces[val] || String(val);
+        const metrics = ctx.measureText(face);
+        const ey = startY + dieSize / 2
+                   + (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2;
+        ctx.fillText(face, x + dieSize / 2, ey);
+        ctx.globalAlpha = 1;
+      });
+    }
+
+    // ── Roll button (right half) ─────────────────────────────────────────
+    const btnH   = Math.min(HUD_H - 12, 40);
+    const btnW   = Math.min(midX * 0.75, 170);
+    const btnX   = midX + (midX - btnW) / 2;
+    const btnY   = hudY + (HUD_H - btnH) / 2;
+    const radius = btnH / 2;
+
+    this._rollArea = [];
+    if (canRoll) {
+      this._rollArea.push({ x: btnX, y: btnY, w: btnW, h: btnH });
+    }
+
+    ctx.globalAlpha = canRoll ? 1 : 0.35;
+    ctx.fillStyle   = canRoll ? '#e94560' : (isDark ? '#2a2a4a' : '#b8a99a');
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY, btnW, btnH, radius);
+    ctx.fill();
+
+    if (canRoll) {
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.beginPath();
+      ctx.roundRect(btnX + 2, btnY + 2, btnW - 4, btnH / 2 - 2, [radius - 1, radius - 1, 0, 0]);
+      ctx.fill();
+    }
+
+    ctx.fillStyle    = canRoll ? '#fff' : (isDark ? '#556' : '#8a7a6a');
+    ctx.font         = `bold ${Math.min(btnH * 0.42, 17)}px Arial`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(canRoll ? '🎲 Roll' : '— Moving —', btnX + btnW / 2, btnY + btnH / 2);
+    ctx.textBaseline = 'alphabetic';
+    ctx.globalAlpha  = 1;
+  }
 
   _drawPolyHighlights(state, pts, PR, theme, boardCX, boardCY, triVerts = null, quadTips = null) {
     const ctx = this.ctx;
