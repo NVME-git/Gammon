@@ -62,13 +62,17 @@ function startGame() {
   const mode    = ui.selectedMode;
   const players = ui.getPlayerData();
 
-  game     = new BackgammonGame(mode, players, {});
+  game = new BackgammonGame(mode, players, {});
+  localStorage.removeItem(SAVE_KEY);
+
+  // Show the game screen first so the canvas parent has valid dimensions
+  // before PixiJS reads them during BoardRenderer initialisation.
+  ui.showGame();
+
   renderer = new BoardRenderer(canvas, game);
   renderer.flipped = false;
   _wireGame(players);
-  localStorage.removeItem(SAVE_KEY);
 
-  ui.showGame();
   handleResize();
   refreshUI();
 }
@@ -78,13 +82,17 @@ function continueGame() {
   if (!raw) return;
   const save = JSON.parse(raw);
 
-  game     = new BackgammonGame(save.mode, save.players, {});
+  game = new BackgammonGame(save.mode, save.players, {});
   game.importSave(save);
+
+  // Show the game screen first so the canvas parent has valid dimensions
+  // before PixiJS reads them during BoardRenderer initialisation.
+  ui.showGame();
+
   renderer = new BoardRenderer(canvas, game);
   renderer.flipped = false;
   _wireGame(save.players);
 
-  ui.showGame();
   handleResize();
   refreshUI();
 }
