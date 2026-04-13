@@ -65,7 +65,7 @@ export class BoardRenderer {
     app.stage.addChild(this._board);
 
     this._ready = true;
-    this.render();
+    this.resize();
   }
 
   // ═════════════════════════════════════════════════════════════════���═════════
