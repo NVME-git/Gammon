@@ -223,9 +223,12 @@ export class UIManager {
     const container = document.getElementById(`avatar-prev-${playerIdx}`);
     if (!container) return;
     container.replaceChildren();
+    const dpr = window.devicePixelRatio || 1;
     const c = document.createElement('canvas');
-    c.width  = 40;
-    c.height = 40;
+    c.width        = 40 * dpr;
+    c.height       = 40 * dpr;
+    c.style.width  = '40px';
+    c.style.height = '40px';
     PixelArt.drawCharacter(c, color);
     container.appendChild(c);
   }
@@ -325,10 +328,13 @@ export class UIManager {
     if (!this.animationsEnabled) { done && done(); return; }
 
     this.$animOv.classList.remove('hidden');
-    const W = window.innerWidth  * 0.7;
-    const H = window.innerHeight * 0.5;
-    this.$animCanvas.width  = Math.max(400, W);
-    this.$animCanvas.height = Math.max(260, H);
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(400, window.innerWidth  * 0.7);
+    const H = Math.max(260, window.innerHeight * 0.5);
+    this.$animCanvas.width        = W * dpr;
+    this.$animCanvas.height       = H * dpr;
+    this.$animCanvas.style.width  = `${W}px`;
+    this.$animCanvas.style.height = `${H}px`;
 
     PixelArt.showEliminationAnimation(
       this.$animCanvas, attackerColor, defenderColor, () => {

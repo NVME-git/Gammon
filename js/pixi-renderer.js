@@ -137,10 +137,8 @@ export class BoardRenderer {
       if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h)
         return { type: 'roll' };
     }
-    for (const a of this._pointAreas) {
-      if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h)
-        return { type: 'point', idx: a.idx };
-    }
+    // Check bar/bearoff before points — point areas span the full board height
+    // and would otherwise swallow clicks intended for the zone boxes.
     for (const a of this._barAreas) {
       if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h)
         return { type: 'bar' };
@@ -148,6 +146,10 @@ export class BoardRenderer {
     for (const a of this._bearAreas) {
       if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h)
         return { type: 'bearoff' };
+    }
+    for (const a of this._pointAreas) {
+      if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h)
+        return { type: 'point', idx: a.idx };
     }
     for (const pc of this._pointCenters) {
       const dx = x - pc.cx, dy = y - pc.cy;

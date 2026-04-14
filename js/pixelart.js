@@ -68,19 +68,23 @@ export class PixelArt {
    * @param {Function} callback  called when animation ends
    */
   static showEliminationAnimation(canvas, attackerColor, defenderColor, callback) {
-    const ctx   = canvas.getContext('2d');
-    const W     = canvas.width;
-    const H     = canvas.height;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    // Work in CSS-pixel space so positions are independent of DPR.
+    const W   = canvas.width  / dpr;
+    const H   = canvas.height / dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const words  = ['BONK!', 'ZAP!', 'BOOM!', 'POW!', 'WHAM!', 'KAPOW!'];
     const word   = words[Math.floor(Math.random() * words.length)];
 
+    // Draw character sprites at full device resolution for sharpness.
     const atkCanvas = document.createElement('canvas');
-    atkCanvas.width  = 64; atkCanvas.height = 64;
+    atkCanvas.width  = 64 * dpr; atkCanvas.height = 64 * dpr;
     PixelArt.drawCharacter(atkCanvas, attackerColor);
 
     const defCanvas = document.createElement('canvas');
-    defCanvas.width  = 64; defCanvas.height = 64;
+    defCanvas.width  = 64 * dpr; defCanvas.height = 64 * dpr;
     PixelArt.drawCharacter(defCanvas, defenderColor);
 
     const TOTAL = 90;
