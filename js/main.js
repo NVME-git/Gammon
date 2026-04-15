@@ -2,6 +2,7 @@ import { UIManager }      from './ui.js';
 import { BackgammonGame } from './game.js';
 import { BoardRenderer }  from './pixi-renderer.js';
 import { MODE_INFO }      from './constants.js';
+import { network }        from './p2p-engine.js';
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let ui            = null;
@@ -34,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
   ui.onThemeChange  = () => { if (renderer) renderer.render(); };
   ui.onNumbersChange = () => { if (renderer) { renderer.showNumbers = ui.showNumbers; renderer.render(); } };
 
-
+  _initP2PUI();
 
   // Show continue button if a saved game exists
   ui.showSetup(!!localStorage.getItem(SAVE_KEY));
@@ -42,6 +43,160 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ─── Game start ───────────────────────────────────────────────────────────────
 const SAVE_KEY = 'gammon_saved_game';
+
+// ─── P2P networking ───────────────────────────────────────────────────────────
+
+/** DOM refs for P2P lobby controls (populated in _initP2PUI). */
+const $p2p = {};
+
+function _initP2PUI() {
+  $p2p.createBtn    = document.getElementById('p2p-create-btn');
+  $p2p.hostArea     = document.getElementById('p2p-host-area');
+  $p2p.roomArea     = document.getElementById('p2p-room-area');
+  $p2p.linkInput    = document.getElementById('p2p-link-input');
+  $p2p.copyBtn      = document.getElementById('p2p-copy-btn');
+  $p2p.peerCount    = document.getElementById('p2p-peer-count');
+  $p2p.waitScreen   = document.getElementById('p2p-waiting-screen');
+  $p2p.waitTitle    = document.getElementById('p2p-waiting-title');
+  $p2p.waitMsg      = document.getElementById('p2p-waiting-msg');
+  $p2p.gameStatus   = document.getElementById('p2p-game-status');
+
+  // "Create Room" button — host path
+  $p2p.createBtn.addEventListener('click', () => {
+    $p2p.createBtn.disabled    = true;
+    $p2p.createBtn.textContent = '⏳ Creating room…';
+
+    network.startHosting((shareLink) => {
+      $p2p.linkInput.value = shareLink;
+      $p2p.hostArea.classList.add('hidden');
+      $p2p.roomArea.classList.remove('hidden');
+      _updatePeerCount(0);
+    });
+  });
+
+  // Copy link to clipboard
+  $p2p.copyBtn.addEventListener('click', () => {
+    navigator.clipboard?.writeText($p2p.linkInput.value).catch(() => {
+      $p2p.linkInput.select();
+    });
+    const prev = $p2p.copyBtn.textContent;
+    $p2p.copyBtn.textContent = '✅ Copied!';
+    setTimeout(() => { $p2p.copyBtn.textContent = prev; }, 2000);
+  });
+
+  // ── NetworkManager callbacks ───────────────────────────────────────────────
+
+  network.onConnectionChange = (count) => {
+    if (network.isHost) _updatePeerCount(count);
+  };
+
+  network.onWaiting = () => {
+    // Guest is connected but host hasn't started yet.
+    _showGuestWaiting('Waiting for host…', 'The host hasn\'t started the game yet. Please wait.');
+  };
+
+  network.onAssigned = (playerIndex, save) => {
+    // Guest received their seat assignment + initial game state from the host.
+    _hideGuestWaiting();
+    if (save) {
+      _startGameFromSave(save, playerIndex);
+    }
+  };
+
+  network.onStateReceived = (save) => {
+    // A state sync arrived (roll, move, etc.).
+    if (!game) return;
+    game.importSave(save);
+    refreshUI();
+    if (game.isGameOver()) showWinScreen();
+  };
+
+  // Let the engine request the current save for late-joining guests.
+  network.getSave = () => (game ? game.exportSave() : null);
+
+  // If the URL has ?room=, we're a guest — connect immediately.
+  network.init();
+
+  if (!network.isHost && network.isOnline) {
+    // Guest: show connecting overlay right away.
+    _showGuestWaiting('Connecting…', 'Connecting to room, please wait.');
+  }
+}
+
+function _updatePeerCount(count) {
+  const word = count === 1 ? 'player' : 'players';
+  $p2p.peerCount.textContent = count === 0
+    ? 'Waiting for players to join…'
+    : `✅ ${count} ${word} connected`;
+  $p2p.peerCount.classList.toggle('connected', count > 0);
+}
+
+function _showGuestWaiting(title, msg) {
+  $p2p.waitTitle.textContent = title;
+  $p2p.waitMsg.textContent   = msg;
+  $p2p.waitScreen.classList.remove('hidden');
+}
+
+function _hideGuestWaiting() {
+  $p2p.waitScreen.classList.add('hidden');
+}
+
+function _updateGameStatus() {
+  if (!$p2p.gameStatus) return;
+  if (!network.isOnline) {
+    $p2p.gameStatus.classList.add('hidden');
+    return;
+  }
+  $p2p.gameStatus.classList.remove('hidden');
+
+  const isMyTurn = game && game.currentPlayer === network.localPlayerIndex;
+  if (isMyTurn) {
+    $p2p.gameStatus.textContent = '🟢 Your turn';
+    $p2p.gameStatus.className   = 'p2p-game-status';
+  } else {
+    $p2p.gameStatus.textContent = '⏳ Opponent\'s turn';
+    $p2p.gameStatus.className   = 'p2p-game-status not-your-turn';
+  }
+}
+
+/**
+ * Start a game for a guest (or late-join reconnect) by importing a host save.
+ * @param {object} save      exportSave() snapshot from the host
+ * @param {number} playerIndex  This client's player index
+ */
+function _startGameFromSave(save, playerIndex) {
+  network.localPlayerIndex = playerIndex;
+
+  const players = save.players;
+  const mode    = save.mode;
+
+  game = new BackgammonGame(mode, players, {});
+  game.importSave(save);
+  hasRolledOnce = true;  // suppress unigammon hint for guests
+
+  ui.showGame();
+  _applyUndoBtnVisibility(mode);
+
+  renderer = new BoardRenderer(canvas, game);
+  renderer.flipped   = false;
+  renderer.showNumbers = ui.showNumbers;
+  _wireGame(players);
+
+  handleResize();
+  refreshUI();
+
+  if (game.isGameOver()) showWinScreen();
+}
+
+/**
+ * Broadcast the current game state to all connected peers.
+ * Called after every roll or checker move by the local player.
+ */
+function _broadcastState() {
+  if (network.isOnline && game) {
+    network.handleMove(game.exportSave());
+  }
+}
 
 function _wireGame(players) {
   game.onCheckerHit = (attacker, defender) => {
@@ -78,6 +233,18 @@ function startGame() {
 
   handleResize();
   refreshUI();
+
+  // Online: assign each connected guest a seat and send the initial state.
+  if (network.isOnline && network.isHost) {
+    network.connections.forEach((conn) => {
+      let idx = network._assignedIndices.get(conn);
+      if (idx === undefined) {
+        idx = network._nextPlayerIndex++;
+        network._assignedIndices.set(conn, idx);
+      }
+      network.assignGuest(conn, idx, game.exportSave());
+    });
+  }
 }
 
 function continueGame() {
@@ -108,6 +275,7 @@ function playAgain() {
 }
 
 function goToMenu() {
+  if (network.isOnline) network.disconnect();
   game     = null;
   renderer = null;
   ui.showSetup(!!localStorage.getItem(SAVE_KEY));
@@ -138,6 +306,7 @@ function applyFlip() {
 // ─── Undo ─────────────────────────────────────────────────────────────────────
 function handleUndo() {
   if (!game) return;
+  if (network.isOnline) return;  // undo disabled in online games to prevent desync
   game.undoMove();
   refreshUI();
 }
@@ -145,6 +314,9 @@ function handleUndo() {
 // ─── Roll dice ────────────────────────────────────────────────────────────────
 function handleRoll() {
   if (!game || game.phase !== 'rolling') return;
+
+  // Online: only the current player may roll.
+  if (network.isOnline && game.currentPlayer !== network.localPlayerIndex) return;
 
   const result = game.rollDice();
   if (!result) return;
@@ -165,12 +337,17 @@ function handleRoll() {
 
   // Unigammon tutorial hints
   if (game.mode === 'unigammon') showTutorialHint();
+
+  _broadcastState();
 }
 
 // ─── Canvas click ─────────────────────────────────────────────────────────────
 function handleCanvasClick(e) {
   if (!game || !renderer) return;
   if (game.phase === 'gameover') return;
+
+  // Online: lock the board when it is not this client's turn.
+  if (network.isOnline && game.currentPlayer !== network.localPlayerIndex) return;
 
   const hit = renderer.hitTest(e.clientX, e.clientY);
   if (hit?.type === 'roll') {
@@ -207,6 +384,7 @@ function handleCanvasClick(e) {
       game.validMoves    = [];
       renderer.render();
       refreshUI();
+      _broadcastState();
 
       if (game.isGameOver()) showWinScreen();
       return;
@@ -256,15 +434,21 @@ function refreshUI() {
   );
 
   ui.setRollButtonState(state.phase === 'rolling', '🎲 Roll');
-  ui.setUndoButtonState(game.canUndo());
+  // Undo is disabled in online games to prevent desync.
+  ui.setUndoButtonState(!network.isOnline && game.canUndo());
 
   if (game.mode === 'unigammon') showTutorialHint();
 
-  // Auto-save after every action; clear save once game is over
-  if (state.phase === 'gameover') {
-    localStorage.removeItem(SAVE_KEY);
-  } else {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(game.exportSave()));
+  _updateGameStatus();
+
+  // Auto-save after every action; clear save once game is over.
+  // Don't auto-save in online games (state is owned by the host).
+  if (!network.isOnline) {
+    if (state.phase === 'gameover') {
+      localStorage.removeItem(SAVE_KEY);
+    } else {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(game.exportSave()));
+    }
   }
 }
 

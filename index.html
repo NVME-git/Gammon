@@ -20,6 +20,8 @@
   <meta name="apple-mobile-web-app-title" content="Gammon">
 
   <link rel="stylesheet" href="css/style.css">
+  <!-- PeerJS via CDN — required for P2P multiplayer (no build step) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
 
@@ -105,6 +107,30 @@
         </button>
       </div>
 
+      <!-- ── P2P Online Play ──────────────────────────────────────────────── -->
+      <section class="setup-section p2p-section">
+        <h2 class="section-label">🌐 Play Online (P2P)</h2>
+
+        <!-- Step 1 — create a room -->
+        <div id="p2p-host-area" class="p2p-host-area">
+          <p class="p2p-hint">Share a link so friends can join your game directly — no server needed!</p>
+          <button id="p2p-create-btn" class="btn btn-secondary">
+            🔗 Create Online Room
+          </button>
+        </div>
+
+        <!-- Step 2 — room created, show link -->
+        <div id="p2p-room-area" class="p2p-room-area hidden">
+          <p class="p2p-label">Share this link with your opponent(s):</p>
+          <div class="p2p-link-row">
+            <input id="p2p-link-input" class="p2p-link-input" type="text" readonly>
+            <button id="p2p-copy-btn" class="btn btn-secondary btn-sm">📋 Copy</button>
+          </div>
+          <p id="p2p-peer-count" class="p2p-status">Waiting for players to join…</p>
+          <p class="p2p-hint p2p-start-hint">Configure players above, then click <strong>New Game</strong> to start.</p>
+        </div>
+      </section>
+
       <a class="bmc-link" href="https://buymeacoffee.com/nabeelvandayar" target="_blank" rel="noopener noreferrer">
         ☕ Buy me a coffee
       </a>
@@ -123,6 +149,7 @@
       <div class="game-float-nav">
         <button id="back-btn" class="btn btn-secondary btn-sm">← Menu</button>
         <button id="flip-btn" class="icon-btn" title="Auto-flip board">↻</button>
+        <span id="p2p-game-status" class="p2p-game-status hidden" title="Online game status"></span>
       </div>
 
       <!-- Floating Buy Me a Coffee button -->
@@ -140,6 +167,18 @@
     </div><!-- /game-layout -->
   </div><!-- /game-screen -->
 
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       P2P GUEST WAITING OVERLAY
+       Shown to guests while the host hasn't started the game yet.
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="p2p-waiting-screen" class="overlay hidden">
+    <div class="win-card p2p-waiting-card">
+      <div class="win-animation p2p-spinner">⏳</div>
+      <h2 id="p2p-waiting-title">Connecting…</h2>
+      <p  id="p2p-waiting-msg">Connecting to room, please wait.</p>
+    </div>
+  </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════
        WIN SCREEN OVERLAY
