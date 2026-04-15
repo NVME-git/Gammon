@@ -4,6 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gammon – Multi-Player Backgammon</title>
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/x-icon" href="/Gammon/favicon.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/Gammon/favicon-16x16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/Gammon/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/Gammon/apple-touch-icon.png">
+
+  <!-- PWA manifest (enables "Add to Home Screen" on Android/iOS) -->
+  <link rel="manifest" href="/Gammon/site.webmanifest">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gammon">
+
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -21,6 +36,10 @@
     <label class="setting-row">
       <span>Sound (visual only)</span>
       <input type="checkbox" id="sound-toggle">
+    </label>
+    <label class="setting-row">
+      <span>Board numbers</span>
+      <input type="checkbox" id="numbers-toggle" checked>
     </label>
   </div>
 
@@ -86,6 +105,10 @@
         </button>
       </div>
 
+      <a class="bmc-link" href="https://buymeacoffee.com/nabeelvandayar" target="_blank" rel="noopener noreferrer">
+        ☕ Buy me a coffee
+      </a>
+
     </div><!-- /setup-container -->
   </div><!-- /setup-screen -->
 
@@ -96,26 +119,20 @@
   <div id="game-screen" class="screen">
     <div class="game-layout">
 
-      <!-- Top bar: left group | centred turn indicator | right group -->
-      <div class="game-top-bar" id="game-top-bar">
-        <div class="top-left">
-          <button id="back-btn" class="btn btn-secondary btn-sm">← Menu</button>
-        </div>
-
-        <div id="turn-indicator" class="turn-indicator"></div>
-
-        <div class="top-right">
-          <button id="undo-btn" class="icon-btn" disabled title="Undo move">↩</button>
-          <button id="flip-btn" class="icon-btn" title="Auto-flip board">↻</button>
-        </div>
+      <!-- Floating game navigation — no top bar -->
+      <div class="game-float-nav">
+        <button id="back-btn" class="btn btn-secondary btn-sm">← Menu</button>
+        <button id="flip-btn" class="icon-btn" title="Auto-flip board">↻</button>
       </div>
 
-      <!-- Collapse handle — always visible, toggles the top bar -->
-      <div class="topbar-handle" id="topbar-handle" title="Show/hide top bar">
-        <span id="topbar-arrow">▲</span>
-      </div>
+      <!-- Floating Buy Me a Coffee button -->
+      <a class="bmc-float" href="https://buymeacoffee.com/nabeelvandayar" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
 
-      <!-- Canvas fills everything below the top bar -->
+      <!-- Hidden elements kept for JS compatibility -->
+      <div id="turn-indicator" style="display:none" aria-hidden="true"></div>
+      <button id="undo-btn"    style="display:none" disabled aria-hidden="true">↩</button>
+
+      <!-- Canvas fills the full screen -->
       <div class="canvas-wrapper">
         <canvas id="game-canvas"></canvas>
       </div>

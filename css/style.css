@@ -90,14 +90,6 @@ body {
 .icon-btn:disabled { opacity: 0.32; cursor: not-allowed; }
 .icon-btn:disabled:hover { background: var(--panel); transform: none; }
 
-/* When inside the top bar, remove fixed positioning */
-.top-right .icon-btn {
-  position: static;
-  top: auto;
-  right: auto;
-  z-index: auto;
-}
-
 .theme-btn    { right: 60px; }
 .settings-btn { right: 14px; }
 
@@ -387,6 +379,56 @@ body {
 
 .funny-name-btn { padding: 7px 10px; flex-shrink: 0; }
 
+/* ── Buy Me a Coffee — setup screen (centred below start button) ────────────── */
+.bmc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 20px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #FFDD00;
+  text-decoration: none;
+  border: 1.5px solid rgba(255,221,0,0.45);
+  background: rgba(255,221,0,0.07);
+  transition: color 0.18s, border-color 0.18s, background 0.18s, transform 0.15s;
+}
+.bmc-link:hover {
+  color: #fff8c0;
+  border-color: #FFDD00;
+  background: rgba(255,221,0,0.16);
+  transform: scale(1.04);
+}
+
+/* ── Buy Me a Coffee — floating button on the game screen ──────────────────── */
+.bmc-float {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.80rem;
+  font-weight: 700;
+  color: #1a1a00;
+  background: #FFDD00;
+  text-decoration: none;
+  border: none;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.45);
+  z-index: 140;
+  transition: background 0.18s, transform 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+#game-screen.active .bmc-float { display: inline-flex; }
+.bmc-float:hover {
+  background: #fff8a0;
+  transform: scale(1.06);
+  box-shadow: 0 5px 18px rgba(0,0,0,0.55);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    GAME SCREEN
    ═══════════════════════════════════════════════════════════════════════════════ */
@@ -404,51 +446,27 @@ body {
   overflow: hidden;
 }
 
-/* ── Top bar (3-section: left | centre | right) ─────────────────────────────── */
-.game-top-bar {
-  display: flex;
+/* ── Floating game navigation (no top bar) ──────────────────────────────────── */
+.game-float-nav {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  display: none;        /* hidden until game screen is active */
   align-items: center;
-  padding: 0 10px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  height: 50px;
   gap: 8px;
-  overflow: hidden;
-  transition: height 0.18s ease, border-bottom-color 0.18s ease;
+  z-index: 150;
 }
-.game-top-bar.collapsed {
-  height: 0;
-  border-bottom-color: transparent;
+#game-screen.active .game-float-nav { display: flex; }
+
+/* When inside the floating nav, icon-btn loses its own fixed position */
+.game-float-nav .icon-btn {
+  position: static;
+  top: auto;
+  right: auto;
+  z-index: auto;
 }
 
-/* ── Collapse handle ─────────────────────────────────────────────────────────── */
-.topbar-handle {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 12px;
-  flex-shrink: 0;
-  cursor: pointer;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  font-size: 8px;
-  color: var(--subtext);
-  transition: background var(--transition), color var(--transition);
-}
-.topbar-handle:hover { background: var(--card-hover); color: var(--text); }
-
-.top-left, .top-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  overflow: hidden;
-}
-.top-right { justify-content: flex-end; flex-shrink: 0; }
-
-
-/* ── Canvas (fills everything below the top bar) ────────────────────────────── */
+/* ── Canvas (fills the full viewport) ──────────────────────────────────────── */
 .canvas-wrapper {
   flex: 1;
   display: flex;
@@ -521,17 +539,16 @@ body {
 /* ── Tutorial hint ──────────────────────────────────────────────────────────── */
 .tutorial-hint {
   position: absolute;
-  bottom: 62px;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 24px;
+  right: 20px;
   background: rgba(0,0,0,0.78);
   color: #ffe800;
-  padding: 10px 20px;
+  padding: 10px 16px;
   border-radius: var(--radius);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   font-weight: 600;
-  text-align: center;
-  max-width: 540px;
+  text-align: left;
+  max-width: 280px;
   pointer-events: none;
   z-index: 150;
   border: 1px solid rgba(255,232,0,0.3);

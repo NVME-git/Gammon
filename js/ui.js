@@ -17,8 +17,9 @@ export class UIManager {
     this.$themeToggle  = document.getElementById('theme-toggle');
     this.$settingsBtn  = document.getElementById('settings-btn');
     this.$settingsPanel= document.getElementById('settings-panel');
-    this.$animToggle   = document.getElementById('anim-toggle');
-    this.$soundToggle  = document.getElementById('sound-toggle');
+    this.$animToggle    = document.getElementById('anim-toggle');
+    this.$soundToggle   = document.getElementById('sound-toggle');
+    this.$numbersToggle = document.getElementById('numbers-toggle');
 
     // Game screen controls
     this.$backBtn      = document.getElementById('back-btn');
@@ -57,9 +58,6 @@ export class UIManager {
     this.$setup.classList.add('active');
     this.$game.classList.remove('active');
     this.$win.classList.add('hidden');
-    // Return global buttons to body (fixed positioning)
-    document.body.insertBefore(this.$themeToggle, document.body.firstChild);
-    document.body.insertBefore(this.$settingsBtn, this.$themeToggle.nextSibling);
     // Show/hide continue button
     const continueBtn = document.getElementById('continue-btn');
     if (continueBtn) continueBtn.classList.toggle('hidden', !hasSave);
@@ -69,10 +67,6 @@ export class UIManager {
     this.$setup.classList.remove('active');
     this.$game.classList.add('active');
     this.$win.classList.add('hidden');
-    // Move global buttons into top bar alongside undo/flip
-    const topRight = this.$game.querySelector('.top-right');
-    topRight.appendChild(this.$themeToggle);
-    topRight.appendChild(this.$settingsBtn);
   }
 
   showWin(winnerName, winnerColor, scores, players) {
@@ -358,6 +352,9 @@ export class UIManager {
 
     this.soundEnabled = localStorage.getItem('gammon_sound') === 'on';
     if (this.$soundToggle) this.$soundToggle.checked = this.soundEnabled;
+
+    this.showNumbers = localStorage.getItem('gammon_numbers') !== 'off';
+    if (this.$numbersToggle) this.$numbersToggle.checked = this.showNumbers;
   }
 
   _toggleTheme() {
@@ -390,6 +387,12 @@ export class UIManager {
     this.$soundToggle?.addEventListener('change', e => {
       this.soundEnabled = e.target.checked;
       localStorage.setItem('gammon_sound', e.target.checked ? 'on' : 'off');
+    });
+
+    this.$numbersToggle?.addEventListener('change', e => {
+      this.showNumbers = e.target.checked;
+      localStorage.setItem('gammon_numbers', e.target.checked ? 'on' : 'off');
+      this.onNumbersChange?.();
     });
 
     this.$modeCards.forEach(card => {

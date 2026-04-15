@@ -75,8 +75,26 @@ export class PixelArt {
     const H   = canvas.height / dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const words  = ['BONK!', 'ZAP!', 'BOOM!', 'POW!', 'WHAM!', 'KAPOW!'];
-    const word   = words[Math.floor(Math.random() * words.length)];
+    const DEATHS = [
+      { word: 'STABBED!',   emoji: '🗡️'  },
+      { word: 'SHOT!',      emoji: '🔫'  },
+      { word: 'KABOOM!',    emoji: '💣'  },
+      { word: 'FLAMBÉED!',  emoji: '🔥'  },
+      { word: 'ZAPPED!',    emoji: '⚡'  },
+      { word: 'BONKED!',    emoji: '🪓'  },
+      { word: 'CHOMPED!',   emoji: '🦈'  },
+      { word: 'SQUISHED!',  emoji: '🚂'  },
+      { word: 'YEETED!',    emoji: '💀'  },
+      { word: 'TOASTED!',   emoji: '🍞'  },
+      { word: 'BZZAPPED!',  emoji: '☠️'  },
+      { word: 'REKT!',      emoji: '🤯'  },
+      { word: 'NOMMED!',    emoji: '🐝'  },
+      { word: 'LAUNCHED!',  emoji: '🌋'  },
+      { word: 'POPPED!',    emoji: '🫧'  },
+    ];
+    const death = DEATHS[Math.floor(Math.random() * DEATHS.length)];
+    const word  = death.word;
+    const emoji = death.emoji;
 
     // Draw character sprites at full device resolution for sharpness.
     const atkCanvas = document.createElement('canvas');
@@ -87,7 +105,7 @@ export class PixelArt {
     defCanvas.width  = 64 * dpr; defCanvas.height = 64 * dpr;
     PixelArt.drawCharacter(defCanvas, defenderColor);
 
-    const TOTAL = 90;
+    const TOTAL = 48;
     let frame = 0;
 
     const tick = () => {
@@ -113,7 +131,7 @@ export class PixelArt {
       ctx.restore();
       ctx.globalAlpha = 1;
 
-      // Effect word
+      // Effect word + emoji
       if (frame < TOTAL * 0.65) {
         const scale = frame < 12 ? frame / 12 : 1 - Math.max(0, frame - 40) * 0.012;
         ctx.save();
@@ -127,6 +145,17 @@ export class PixelArt {
         ctx.fillStyle = '#ffe800';
         ctx.fillText(word, 0, 0);
         ctx.restore();
+
+        // Floating emoji beside the word
+        const emojiScale = scale * 2.0;
+        ctx.save();
+        ctx.translate(W / 2 + 70 * emojiScale, H / 2 - 70 - Math.sin(frame * 0.25) * 8);
+        ctx.font = `${Math.round(20 * emojiScale)}px serif`;
+        ctx.textAlign = 'center';
+        ctx.globalAlpha = Math.min(1, scale * 1.5);
+        ctx.fillText(emoji, 0, 0);
+        ctx.restore();
+        ctx.globalAlpha = 1;
       }
 
       frame++;

@@ -112,14 +112,16 @@ export class BackgammonGame {
       return;
     }
 
-    // 4-player (offset=6)
-    const offset = Math.floor(NUM_POINTS / N);
+    // 4-player quadgammon: S-path through cross arms.
+    // Each player starts at the TIP of their arm (outermost = virtual 0)
+    // and their 24-point path alternates inward/outward through the 4 arms.
+    // Arms: arm0=down(0-5), arm1=left(6-11), arm2=up(12-17), arm3=right(18-23)
+    // P0=South(arm0), P1=West(arm1), P2=North(arm2), P3=East(arm3)
     for (let p = 0; p < N; p++) {
-      const o = p * offset;
-      this._set(p, (o + 0) % 24, 5);
-      this._set(p, (o + 1) % 24, 5);
-      this._set(p, (o + 2) % 24, 3);
-      this._set(p, (o + offset - 1) % 24, 2);
+      this._set(p, this.getActualPos(p, 0), 5);
+      this._set(p, this.getActualPos(p, 1), 5);
+      this._set(p, this.getActualPos(p, 2), 3);
+      this._set(p, this.getActualPos(p, 5), 2);
     }
   }
 
@@ -135,11 +137,38 @@ export class BackgammonGame {
     if (this.mode === 'trigammon') {
       if (player === 0) return virtual;
       if (player === 1) return virtual <= 11 ? 35 - virtual : 23 - virtual;
-      // player === 2: v 0-11 → 23-v (main-right), v 12-23 → v+12 (arm)
       return virtual <= 11 ? 23 - virtual : virtual + 12;
     }
     if (this.numPlayers <= 2 && player === 0) return virtual;
     if (this.numPlayers === 2 && player === 1) return 23 - virtual;
+    if (this.mode === 'quadgammon') {
+      // S-path: each player travels arm1(tip→hub) → arm2(hub→tip) → arm3(tip→hub) → arm4(hub→tip)
+      // Arms: arm0=down(0-5), arm1=left(6-11), arm2=up(12-17), arm3=right(18-23)
+      // P0=South, P1=West, P2=North, P3=East
+      const v = virtual;
+      switch (player) {
+        case 0: // arm0(in), arm1(out), arm3(in), arm2(out)
+          if (v <= 5)  return 5 - v;
+          if (v <= 11) return v;
+          if (v <= 17) return 35 - v;
+          return v - 6;
+        case 1: // arm1(in), arm2(out), arm0(in), arm3(out)
+          if (v <= 5)  return 11 - v;
+          if (v <= 11) return v + 6;
+          if (v <= 17) return 17 - v;
+          return v;
+        case 2: // arm2(in), arm3(out), arm1(in), arm0(out)
+          if (v <= 5)  return 17 - v;
+          if (v <= 11) return v + 12;
+          if (v <= 17) return 23 - v;
+          return v - 18;
+        case 3: // arm3(in), arm0(out), arm2(in), arm1(out)
+          if (v <= 5)  return 23 - v;
+          if (v <= 11) return v - 6;
+          if (v <= 17) return 29 - v;
+          return v - 12;
+      }
+    }
     const offset = player * Math.floor(NUM_POINTS / this.numPlayers);
     return (virtual + offset) % 24;
   }
@@ -148,11 +177,35 @@ export class BackgammonGame {
     if (this.mode === 'trigammon') {
       if (player === 0) return actual;
       if (player === 1) return actual >= 24 ? 35 - actual : 23 - actual;
-      // player === 2: arm (24-35) → a-12, main-right (12-23) → 23-a
       return actual >= 24 ? actual - 12 : 23 - actual;
     }
     if (this.numPlayers <= 2 && player === 0) return actual;
     if (this.numPlayers === 2 && player === 1) return 23 - actual;
+    if (this.mode === 'quadgammon') {
+      // Inverse of getActualPos for quadgammon
+      switch (player) {
+        case 0:
+          if (actual <= 5)  return 5 - actual;        // arm0 section1 (inward)
+          if (actual <= 11) return actual;             // arm1 section2 (outward)
+          if (actual <= 17) return actual + 6;         // arm2 section4 (outward)
+          return 35 - actual;                          // arm3 section3 (inward)
+        case 1:
+          if (actual <= 5)  return 17 - actual;        // arm0 section3 (inward)
+          if (actual <= 11) return 11 - actual;        // arm1 section1 (inward)
+          if (actual <= 17) return actual - 6;         // arm2 section2 (outward)
+          return actual;                               // arm3 section4 (outward)
+        case 2:
+          if (actual <= 5)  return actual + 18;        // arm0 section4 (outward)
+          if (actual <= 11) return 23 - actual;        // arm1 section3 (inward)
+          if (actual <= 17) return 17 - actual;        // arm2 section1 (inward)
+          return actual - 12;                          // arm3 section2 (outward)
+        case 3:
+          if (actual <= 5)  return actual + 6;         // arm0 section2 (outward)
+          if (actual <= 11) return actual + 12;        // arm1 section4 (outward)
+          if (actual <= 17) return 29 - actual;        // arm2 section3 (inward)
+          return 23 - actual;                          // arm3 section1 (inward)
+      }
+    }
     const offset = player * Math.floor(NUM_POINTS / this.numPlayers);
     return (actual - offset + 24) % 24;
   }
@@ -163,7 +216,7 @@ export class BackgammonGame {
 
   rollDice() {
     if (this.phase !== 'rolling') return null;
-    this._saveHistory();
+    // Do NOT save history here — undo should only revert checker moves, not dice rolls.
 
     const d1 = Math.ceil(Math.random() * 6);
     const d2 = Math.ceil(Math.random() * 6);

@@ -1,41 +1,56 @@
 import { Container, Graphics, Text, Sprite } from 'pixi.js';
 import { getCheckerTexture } from '../textures.js';
-import { drawPolyHUD, drawBoardDice, drawArmHighlights, drawTipZone, drawArmChevron } from './shared.js';
+import { drawFloatingDice, drawArmChevron, drawCheckerPips } from './shared.js';
 
 /**
  * Build the Y-shaped trigammon board (36 physical points).
  *
  * Three arms radiate from a central hub at 120-degree intervals.
- * Arm A is visually reversed so all players bear off at arm tips.
+ * One arm points straight up (-π/2); two arms point down-left and down-right.
+ * Arm A (arm0) is visually reversed so all players bear off at arm tips.
+ *
+ * BAR / OFF zones live in the right side panel (always visible).
+ * Dice live in the left side panel (large).
  */
-export function buildTriangleBoard(app, container, game, state, theme, hitRegions) {
+export function buildTriangleBoard(app, container, game, state, theme, hitRegions, showNumbers = true) {
   const W = app.screen.width;
   const H = app.screen.height;
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
-  const HUD_H  = Math.min(64, H * 0.14);
-  const boardH = H - HUD_H;
   const bCx    = W / 2;
-  const bCy    = boardH * 0.50;
 
-  // ── Arm directions (120 degrees apart, Y-shape) ──────────────────────────
+  // ── Arm directions: down-right(π/6), up(-π/2), down-left(5π/6) ───────────
   const armAngles = [Math.PI / 6, -Math.PI / 2, Math.PI * 5 / 6];
   const armDirs   = armAngles.map(a => ({
     dx: Math.cos(a), dy: Math.sin(a),
     nx: -Math.sin(a), ny: Math.cos(a),
   }));
 
-  // ── Sizing ───────────────────────────────────────────────────────────────
-  const maxR     = Math.min(W * 0.34, boardH * 0.36);
-  const armW     = maxR * 0.22;
+  // ── Sizing: full screen (no HUD strip) ───────────────────────────────────
+  // Side arms reach maxR*(0.866+0.12)=maxR*0.986 horizontally, plus ~13% extra
+  // for the BAR/OFF badges that extend laterally beyond the arm tips.
+  const tipPad   = 20;
+  const sideMaxR = (W / 2 - tipPad) / 1.13;
+  // Vertical: lower arm tips at bCy + maxR*0.5; badges add ~0.208*maxR+30 below.
+  // Derived constraint: maxR * 1.71 + 62 ≤ H − topPad − tipPad
+  const topPad   = 40;
+  const vertMaxR = (H - topPad - tipPad - 62) / 1.71;
+  const maxR     = Math.min(sideMaxR, vertMaxR);
+  const bCy      = maxR + topPad;
+
+  const armW     = maxR * 0.24;
   const hw       = armW / 2;
-  const hubR     = Math.max(armW * 0.6, 16);
-  const armStart = hubR + 2;
+  const armStart = Math.max(hw * 1.15, 6);   // minimal gap — no hub circle
   const armEnd   = maxR;
   const slotLen  = (armEnd - armStart) / 12;
-  const CR       = Math.min(slotLen * 0.42, hw * 0.38, 10);
+  const CR       = Math.min(slotLen * 0.42, hw * 0.38, 14);
   const dHW      = hw * 0.92;
   const dHL      = slotLen * 0.46;
+
+  // ── Spacing: board → number → chevron ────────────────────────────────────
+  const labelFontSize = Math.max(11, Math.min(hw * 0.34, 16));
+  const labelPad      = hw + 12;               // label centre, outside arm edge
+  const chevEdgeDist  = labelPad + labelFontSize + 8;  // chevron centre
 
   // ── Player-colour pairs per arm ──────────────────────────────────────────
   const armColors = [
@@ -43,6 +58,9 @@ export function buildTriangleBoard(app, container, game, state, theme, hitRegion
     [game.players[0].color, game.players[2].color],
     [game.players[1].color, game.players[2].color],
   ];
+
+  // offP per arm: arm0→P1, arm1→P0, arm2→P2  (bearoff player at each arm tip)
+  const offPlayerPerArm = [1, 0, 2];
 
   const slotOf = (physIdx) => {
     const arm = Math.floor(physIdx / 12);
@@ -54,7 +72,6 @@ export function buildTriangleBoard(app, container, game, state, theme, hitRegion
   for (let arm = 0; arm < 3; arm++) {
     const { dx, dy, nx, ny } = armDirs[arm];
     const strip = new Graphics();
-
     strip.poly([
       bCx + dx * armStart + nx * hw, bCy + dy * armStart + ny * hw,
       bCx + dx * armEnd   + nx * hw, bCy + dy * armEnd   + ny * hw,
@@ -75,8 +92,7 @@ export function buildTriangleBoard(app, container, game, state, theme, hitRegion
     const dashes = new Graphics();
     const len = armEnd - armStart;
     for (let d = 0; d < len; d += 8) {
-      const t0 = armStart + d;
-      const t1 = Math.min(armStart + d + 3, armEnd);
+      const t0 = armStart + d, t1 = Math.min(t0 + 3, armEnd);
       dashes.moveTo(bCx + dx * t0, bCy + dy * t0);
       dashes.lineTo(bCx + dx * t1, bCy + dy * t1);
     }
@@ -84,13 +100,27 @@ export function buildTriangleBoard(app, container, game, state, theme, hitRegion
     container.addChild(dashes);
   }
 
-  // ── Central hub ──────────────────────────────────────────────────────────
-  const hub = new Graphics();
-  hub.circle(bCx, bCy, hubR);
-  hub.fill(theme.barArea);
-  hub.circle(bCx, bCy, hubR);
-  hub.stroke({ width: 2, color: theme.boardBorder });
-  container.addChild(hub);
+  // ── Home board markers (outer 6 slots of each arm) ────────────────────────
+  for (let arm = 0; arm < 3; arm++) {
+    const { dx, dy, nx, ny } = armDirs[arm];
+    const pColor  = game.players[offPlayerPerArm[arm]].color;
+    const homeT0  = armStart + 6 * slotLen;
+    const homeGfx = new Graphics();
+
+    homeGfx.poly([
+      bCx + dx * homeT0 + nx * hw, bCy + dy * homeT0 + ny * hw,
+      bCx + dx * armEnd + nx * hw, bCy + dy * armEnd + ny * hw,
+      bCx + dx * armEnd - nx * hw, bCy + dy * armEnd - ny * hw,
+      bCx + dx * homeT0 - nx * hw, bCy + dy * homeT0 - ny * hw,
+    ]);
+    homeGfx.fill({ color: pColor, alpha: 0.10 });
+
+    homeGfx.moveTo(bCx + dx * homeT0 + nx * hw, bCy + dy * homeT0 + ny * hw);
+    homeGfx.lineTo(bCx + dx * homeT0 - nx * hw, bCy + dy * homeT0 - ny * hw);
+    homeGfx.stroke({ width: 2, color: pColor, alpha: 0.50 });
+
+    container.addChild(homeGfx);
+  }
 
   // ── Diamond points ───────────────────────────────────────────────────────
   const allPts = [];
@@ -103,44 +133,68 @@ export function buildTriangleBoard(app, container, game, state, theme, hitRegion
       const physIdx = arm * 12 + i;
       const slot    = slotOf(physIdx);
       const t       = armStart + (slot + 0.5) * slotLen;
-
       const pcx = bCx + dx * t;
       const pcy = bCy + dy * t;
 
       const diamond = new Graphics();
       diamond.poly([
-        pcx + dx * dHL,  pcy + dy * dHL,
-        pcx + nx * dHW,  pcy + ny * dHW,
-        pcx - dx * dHL,  pcy - dy * dHL,
-        pcx - nx * dHW,  pcy - ny * dHW,
+        pcx + dx * dHL, pcy + dy * dHL,
+        pcx + nx * dHW, pcy + ny * dHW,
+        pcx - dx * dHL, pcy - dy * dHL,
+        pcx - nx * dHW, pcy - ny * dHW,
       ]);
       diamond.fill((i % 2 === 0) ? c1 : c2);
       container.addChild(diamond);
 
       allPts.push({ physIdx, pcx, pcy, arm });
-      hitRegions.pointCenters.push({
-        cx: pcx, cy: pcy,
-        r: Math.max(dHW, dHL) * 1.1,
+      hitRegions.pointPolygons.push({
+        poly: [
+          pcx + dx * dHL, pcy + dy * dHL,
+          pcx + nx * dHW, pcy + ny * dHW,
+          pcx - dx * dHL, pcy - dy * dHL,
+          pcx - nx * dHW, pcy - ny * dHW,
+        ],
         idx: physIdx,
       });
     }
   }
 
-  // ── Point labels ─────────────────────────────────────────────────────────
-  const labelStyle = {
-    fontFamily: 'Arial',
-    fontWeight: 'bold',
-    fontSize: Math.max(6, CR * 0.55),
-    fill: 0xffffff,
-  };
+  // ── Point labels — outside diamond on each player's chevron side ─────────
+  // inP label on -nx side (same side as inP's chevrons); outP on +nx side.
+  const armFlowForLabels = [
+    { outP: 1, inP: 0 },
+    { outP: 0, inP: 2 },
+    { outP: 2, inP: 1 },
+  ];
 
-  for (const pt of allPts) {
-    const label = new Text({ text: String(pt.physIdx + 1), style: labelStyle });
-    label.anchor.set(0.5);
-    label.x = pt.pcx;
-    label.y = pt.pcy;
-    label.alpha = 0.45;
-    container.addChild(label);
+  if (showNumbers) for (const pt of allPts) {
+    const arm = Math.floor(pt.physIdx / 12);
+    const { nx, ny } = armDirs[arm];
+    const { inP, outP } = armFlowForLabels[arm];
+
+    // inP label on -nx side (right-hand side of inP's inward travel)
+    const inLabel = new Text({
+      text: String(game.getVirtualPos(inP, pt.physIdx) + 1),
+      style: { fontFamily: 'Arial', fontWeight: 'bold', fontSize: labelFontSize,
+               fill: game.players[inP].color },
+    });
+    inLabel.anchor.set(0.5);
+    inLabel.x = pt.pcx - nx * labelPad;
+    inLabel.y = pt.pcy - ny * labelPad;
+    inLabel.alpha = 0.95;
+    container.addChild(inLabel);
+
+    // outP label on +nx side (right-hand side of outP's outward travel)
+    const outLabel = new Text({
+      text: String(game.getVirtualPos(outP, pt.physIdx) + 1),
+      style: { fontFamily: 'Arial', fontWeight: 'bold', fontSize: labelFontSize,
+               fill: game.players[outP].color },
+    });
+    outLabel.anchor.set(0.5);
+    outLabel.x = pt.pcx + nx * labelPad;
+    outLabel.y = pt.pcy + ny * labelPad;
+    outLabel.alpha = 0.95;
+    container.addChild(outLabel);
   }
 
   // ── Checkers (stacked perpendicular to arm) ──────────────────────────────
@@ -150,7 +204,6 @@ export function buildTriangleBoard(app, container, game, state, theme, hitRegion
     const { nx, ny } = armDirs[pt.arm];
     const color = game.players[sp.player]?.color || '#888';
     const tex   = getCheckerTexture(app.renderer, color, CR);
-
     for (let s = 0; s < sp.count; s++) {
       const offset = (s - (sp.count - 1) / 2) * (CR * 2 + 1);
       const checker = new Sprite(tex);
@@ -161,92 +214,62 @@ export function buildTriangleBoard(app, container, game, state, theme, hitRegion
     }
   }
 
-  // ── Direction chevrons ───────────────────────────────────────────────────
+  // ── Direction chevrons — each player on their right-hand side, full arm ──
+  // inP moves inward (-dx,-dy), placed on -nx side of arm.
+  // outP moves outward (+dx,+dy), placed on +nx side of arm.
   const armFlow = [
-    { outP: 1, inP: 0 },
-    { outP: 0, inP: 2 },
-    { outP: 2, inP: 1 },
+    { outP: 1, inP: 0 },   // arm0: P1 outward, P0 inward
+    { outP: 0, inP: 2 },   // arm1: P0 outward, P2 inward
+    { outP: 2, inP: 1 },   // arm2: P2 outward, P1 inward
   ];
-
-  const chevH = Math.min(hw * 0.55, 10);
-  const chevW = chevH * 0.65;
-  const chevN = Math.max(3, Math.floor((armEnd - armStart) / (slotLen * 3)));
+  const chevH  = Math.min(hw * 0.72, 16);
+  const chevW  = chevH * 0.65;
+  const chevN  = Math.max(3, Math.floor((armEnd - armStart) / (slotLen * 2.5)));
 
   const chevGfx = new Graphics();
   for (let arm = 0; arm < 3; arm++) {
     const { dx, dy, nx, ny } = armDirs[arm];
     const { outP, inP } = armFlow[arm];
-    const outCol = game.players[outP].color;
-    const inCol  = game.players[inP].color;
+    const outCol   = game.players[outP].color;
+    const inCol    = game.players[inP].color;
 
     for (let c = 0; c < chevN; c++) {
       const frac = (c + 0.5) / chevN;
-      const t  = armStart + frac * (armEnd - armStart);
-      const cx = bCx + dx * t;
-      const cy = bCy + dy * t;
-      const edgeDist = hw + chevH * 0.9;
+      const t    = armStart + frac * (armEnd - armStart);
+      const cx   = bCx + dx * t, cy = bCy + dy * t;
 
-      drawArmChevron(chevGfx, cx + nx * edgeDist, cy + ny * edgeDist,
-                     chevW, chevH, dx, dy, outCol, 0.30);
-      drawArmChevron(chevGfx, cx - nx * edgeDist, cy - ny * edgeDist,
-                     chevW, chevH, -dx, -dy, inCol, 0.30);
+      // inP on -nx side (right-hand side of their inward travel)
+      drawArmChevron(chevGfx, cx - nx * chevEdgeDist, cy - ny * chevEdgeDist,
+                     chevW, chevH, -dx, -dy, inCol, 0.72);
+      // outP on +nx side (right-hand side of their outward travel)
+      drawArmChevron(chevGfx, cx + nx * chevEdgeDist, cy + ny * chevEdgeDist,
+                     chevW, chevH, dx, dy, outCol, 0.72);
     }
   }
   container.addChild(chevGfx);
 
-  // ── Zone boxes (BAR + OFF at each arm tip) ───────────────────────────────
-  const tipDefs = [
-    { arm: 0, barP: 0, offP: 1 },
-    { arm: 1, barP: 2, offP: 0 },
-    { arm: 2, barP: 1, offP: 2 },
-  ];
+  // ── BAR / OFF checker piles at arm tips + hit regions ─────────────────
+  const badgeLat  = hw + labelPad + labelFontSize * 0.5 + 10;
+  const hitRadius = 28;  // click radius around the pip stack centre
 
-  const zoneR     = Math.min(22, maxR * 0.09);
-  const bearZones = [];
-  const barZones  = [];
+  for (let arm = 0; arm < 3; arm++) {
+    const { dx, dy, nx, ny } = armDirs[arm];
+    const { inP, outP } = armFlow[arm];
+    const tipX = bCx + dx * armEnd;
+    const tipY = bCy + dy * armEnd;
 
-  for (const td of tipDefs) {
-    const { dx, dy, nx, ny } = armDirs[td.arm];
-    const tipDist = armEnd + zoneR * 0.6;
+    const barCx = tipX - nx * badgeLat;
+    const barCy = tipY - ny * badgeLat;
+    drawCheckerPips(container, barCx, barCy, 'BAR', state.bar[inP], game.players[inP].color, labelFontSize);
+    hitRegions.barAreas.push({ x: barCx - hitRadius, y: barCy - hitRadius, w: hitRadius * 2, h: hitRadius * 2 });
 
-    // BAR zone
-    const barTx = bCx + dx * tipDist + nx * (zoneR * 2);
-    const barTy = bCy + dy * tipDist + ny * (zoneR * 2);
-    const barCt = state.bar[td.barP];
-    drawTipZone(container, barTx, barTy, zoneR, 'BAR', barCt, game.players[td.barP].color);
-    const bw = zoneR * 3.2, bh = zoneR * 1.6;
-    hitRegions.barAreas.push({ x: barTx - bw / 2, y: barTy - bh / 2, w: bw, h: bh });
-    barZones.push({ player: td.barP, tx: barTx, ty: barTy });
-
-    // Bar checkers
-    if (barCt > 0) {
-      const color = game.players[td.barP].color;
-      const tex   = getCheckerTexture(app.renderer, color, CR * 0.55);
-      for (let s = 0; s < barCt; s++) {
-        const sp = new Sprite(tex);
-        sp.anchor.set(0.5);
-        sp.x = barTx + dx * (zoneR * 1.4 + s * CR * 1.6);
-        sp.y = barTy + dy * (zoneR * 1.4 + s * CR * 1.6);
-        container.addChild(sp);
-      }
-    }
-
-    // OFF zone
-    const offTx = bCx + dx * tipDist - nx * (zoneR * 2);
-    const offTy = bCy + dy * tipDist - ny * (zoneR * 2);
-    const offCt = state.borneOff[td.offP];
-    drawTipZone(container, offTx, offTy, zoneR, 'OFF', offCt, game.players[td.offP].color);
-    hitRegions.bearAreas.push({ x: offTx - bw / 2, y: offTy - bh / 2, w: bw, h: bh });
-    bearZones.push({ player: td.offP, tx: offTx, ty: offTy });
+    const offCx = tipX + nx * badgeLat;
+    const offCy = tipY + ny * badgeLat;
+    drawCheckerPips(container, offCx, offCy, 'OFF', state.borneOff[outP], game.players[outP].color, labelFontSize);
+    hitRegions.bearAreas.push({ x: offCx - hitRadius, y: offCy - hitRadius, w: hitRadius * 2, h: hitRadius * 2 });
   }
 
-  // ── Highlights ───────────────────────────────────────────────────────────
-  const hlR = Math.max(dHW, dHL) * 1.1;
-  drawArmHighlights(container, state, allPts, hlR, theme, barZones, bearZones);
-
-  // ── Dice on the board (centred at hub) ─────────────────────────────────
-  drawBoardDice(container, state, game, bCx, bCy, theme, isDark);
-
-  // ── HUD (roll button only) ─────────────────────────────────────────────
-  drawPolyHUD(container, state, game, W, H, HUD_H, theme, isDark, hitRegions);
+  // ── Floating dice + Roll + Undo buttons (top-left corner) ───────────────
+  drawFloatingDice(container, state, game, theme, isDark,
+    { showButtons: true, showUndo: true, hitRegions });
 }

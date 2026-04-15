@@ -4,11 +4,12 @@ import { BoardRenderer }  from './pixi-renderer.js';
 import { MODE_INFO }      from './constants.js';
 
 // ─── State ───────────────────────────────────────────────────────────────────
-let ui       = null;
-let game     = null;
-let renderer = null;
-let canvas   = null;
-let autoFlip = false;
+let ui            = null;
+let game          = null;
+let renderer      = null;
+let canvas        = null;
+let autoFlip      = false;
+let hasRolledOnce = false;  // suppress the "click Roll" tutorial hint after first roll
 
 // Named delay constant for the "no moves" forfeit message
 const FORFEIT_MESSAGE_DELAY_MS = 800;
@@ -29,17 +30,11 @@ document.addEventListener('DOMContentLoaded', () => {
   canvas.addEventListener('click', handleCanvasClick);
   window.addEventListener('resize', handleResize);
 
-  // Re-render board on theme change
-  ui.onThemeChange = () => { if (renderer) renderer.render(); };
+  // Re-render board on theme / numbers-toggle change
+  ui.onThemeChange  = () => { if (renderer) renderer.render(); };
+  ui.onNumbersChange = () => { if (renderer) { renderer.showNumbers = ui.showNumbers; renderer.render(); } };
 
-  // Top bar collapse toggle
-  document.getElementById('topbar-handle').addEventListener('click', () => {
-    const bar   = document.getElementById('game-top-bar');
-    const arrow = document.getElementById('topbar-arrow');
-    const collapsed = bar.classList.toggle('collapsed');
-    arrow.textContent = collapsed ? '▼' : '▲';
-    if (renderer) renderer.resize();
-  });
+
 
   // Show continue button if a saved game exists
   ui.showSetup(!!localStorage.getItem(SAVE_KEY));
@@ -58,19 +53,27 @@ function _wireGame(players) {
   };
 }
 
+function _applyUndoBtnVisibility(_mode) {
+  // Undo is now handled entirely via canvas hit-testing for all board types.
+  // The DOM undo-btn is hidden in HTML; nothing to do here.
+}
+
 function startGame() {
   const mode    = ui.selectedMode;
   const players = ui.getPlayerData();
 
   game = new BackgammonGame(mode, players, {});
   localStorage.removeItem(SAVE_KEY);
+  hasRolledOnce = false;
 
   // Show the game screen first so the canvas parent has valid dimensions
   // before PixiJS reads them during BoardRenderer initialisation.
   ui.showGame();
+  _applyUndoBtnVisibility(mode);
 
   renderer = new BoardRenderer(canvas, game);
   renderer.flipped = false;
+  renderer.showNumbers = ui.showNumbers;
   _wireGame(players);
 
   handleResize();
@@ -88,9 +91,11 @@ function continueGame() {
   // Show the game screen first so the canvas parent has valid dimensions
   // before PixiJS reads them during BoardRenderer initialisation.
   ui.showGame();
+  _applyUndoBtnVisibility(save.mode);
 
   renderer = new BoardRenderer(canvas, game);
   renderer.flipped = false;
+  renderer.showNumbers = ui.showNumbers;
   _wireGame(save.players);
 
   handleResize();
@@ -150,6 +155,7 @@ function handleRoll() {
     game.validMoves    = game.getValidMoves('bar');
   }
 
+  hasRolledOnce = true;
   refreshUI();
 
   if (result.forfeit) {
@@ -169,6 +175,10 @@ function handleCanvasClick(e) {
   const hit = renderer.hitTest(e.clientX, e.clientY);
   if (hit?.type === 'roll') {
     handleRoll();
+    return;
+  }
+  if (hit?.type === 'undo') {
+    handleUndo();
     return;
   }
 
@@ -275,7 +285,9 @@ function showTutorialHint() {
 
   const state = game.getState();
   if (state.phase === 'rolling') {
-    ui.showTutorialHint('🎲 Click "Roll" to roll the dice, then move your checkers to the right!');
+    // Only show the roll instruction until the player has done it once
+    if (hasRolledOnce) { ui.hideTutorialHint(); return; }
+    ui.showTutorialHint('🎲 Click "Roll" to roll the dice, then move your checkers in the direction shown!');
   } else if (state.bar[0] > 0) {
     ui.showTutorialHint('🔴 You have a checker on the bar! Click the BAR area to re-enter it.');
   } else if (game.canBearOff(0)) {

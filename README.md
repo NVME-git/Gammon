@@ -94,3 +94,9 @@ js/
 - **[PixiJS v8](https://pixijs.com/)** — WebGL 2D rendering
 - **[Vite](https://vitejs.dev/)** — Dev server and production bundler
 - Vanilla JS (ES modules), no framework
+
+## Support
+
+If you enjoy Gammon, consider buying me a coffee!
+
+[![Buy Me a Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=☕&slug=nabeelvandayar&button_colour=FFDD00&font_colour=000000&font_family=Arial&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/nabeelvandayar)

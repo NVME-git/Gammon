@@ -1,6 +1,6 @@
-import { Container, Graphics, Text } from 'pixi.js';
-import { getCheckerTexture, getWoodTexture } from '../textures.js';
-import { Sprite } from 'pixi.js';
+import { Container, Graphics, Text, Sprite } from 'pixi.js';
+import { getCheckerTexture } from '../textures.js';
+import { drawFloatingDice, drawCheckerPips } from './shared.js';
 
 /**
  * Build the linear board layout (Unigammon / Bigammon).
@@ -8,7 +8,7 @@ import { Sprite } from 'pixi.js';
  * 24 diamond points in a horizontal strip with BAR/OFF zones
  * in the top and bottom strips.
  */
-export function buildLinearBoard(app, container, game, state, theme, flipped, hitRegions) {
+export function buildLinearBoard(app, container, game, state, theme, flipped, hitRegions, showNumbers = true) {
   const W = app.screen.width;
   const H = app.screen.height;
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -20,7 +20,10 @@ export function buildLinearBoard(app, container, game, state, theme, flipped, hi
   const CY      = boardY + BOARD_H / 2;
   const TH      = BOARD_H * 0.30;
 
-  const boardStartX = PAD;
+  // Float cluster uses dieSize=72 → boxW = 2*72 + 3*8 = 168. Shift board right to clear it.
+  const FLOAT_DIE   = 72;
+  const FLOAT_BOX_W = 2 * FLOAT_DIE + 3 * 8; // = 168
+  const boardStartX = PAD + FLOAT_BOX_W + 12;  // = 194 — leaves 12px gap after cluster
   const boardEndX   = W - PAD;
   const PW          = (boardEndX - boardStartX) / 24;
 
@@ -51,11 +54,15 @@ export function buildLinearBoard(app, container, game, state, theme, flipped, hi
     { player: 0, type: 'off', x: boardEndX - ZW, y: botZoneY, w: ZW, h: botZoneH },
   ];
 
-  // ── Board background (wood texture) ────────────────────────────────────
-  const bgSprite = new Sprite(getWoodTexture(app.renderer, W - PAD * 2, BOARD_H, theme.board, isDark));
-  bgSprite.x = PAD;
-  bgSprite.y = PAD;
-  container.addChild(bgSprite);
+  // ── Board background ───────────────────────────────────────────────────
+  const bg = new Graphics();
+  bg.rect(PAD, PAD, W - PAD * 2, BOARD_H);
+  bg.fill(theme.board);
+  container.addChild(bg);
+
+  // ── Home board markers ─────────────────────────────────────────────────
+  // Marks the 6 inner points where each player can begin bearing off.
+  _drawHomeBoardMarkers(container, game, boardStartX, boardEndX, boardY, BOARD_H, PW, CY, TH, flipped, is2P, bottomPlayer, topPlayer);
 
   // ── Dashed centre axis ─────────────────────────────────────────────────
   const axis = new Graphics();
@@ -83,7 +90,11 @@ export function buildLinearBoard(app, container, game, state, theme, flipped, hi
     diamonds.poly([pcx, CY - TH, px + PW, CY, pcx, CY + TH, px, CY]);
     diamonds.fill(dColors[i % 2]);
 
-    hitRegions.pointAreas.push({ x: px, y: boardY, w: PW, h: BOARD_H, idx: i });
+    // Diamond polygon hit area (exact diamond shape, not full column)
+    hitRegions.pointPolygons.push({
+      poly: [pcx, CY - TH, px + PW, CY, pcx, CY + TH, px, CY],
+      idx: i,
+    });
   }
   container.addChild(diamonds);
 
@@ -96,7 +107,7 @@ export function buildLinearBoard(app, container, game, state, theme, flipped, hi
     alpha: 0.88,
   };
 
-  for (let i = 0; i < 24; i++) {
+  if (showNumbers) for (let i = 0; i < 24; i++) {
     const pcx = pp(i) + PW / 2;
 
     const topLabel = new Text({ text: String(i + 1), style: labelStyle });
@@ -157,15 +168,27 @@ export function buildLinearBoard(app, container, game, state, theme, flipped, hi
     _drawChevrons(container, game, boardStartX, boardEndX, boardY, CY, TH, BOARD_H, flipped);
   }
 
-  // ── BAR / OFF zone boxes ───────────────────────────────────────────────
+  // ── BAR / OFF zones — checker pip display ─────────────────────────────
   for (const zone of allZones) {
     if (zone.player >= game.numPlayers) continue;
     const pColor = game.players[zone.player].color;
-    const pName  = game.players[zone.player].name;
     const count  = zone.type === 'bar'
       ? state.bar[zone.player]
       : state.borneOff[zone.player];
-    _drawZoneBox(container, zone, count, pName, pColor, theme);
+    const label = zone.type === 'bar' ? 'BAR' : 'OFF';
+    const zCx = zone.x + zone.w / 2;
+    const zCy = zone.y + zone.h / 2;
+
+    // Tinted zone background
+    const zoneBg = new Graphics();
+    zoneBg.roundRect(zone.x, zone.y, zone.w, zone.h, 6);
+    zoneBg.fill({ color: pColor, alpha: 0.12 });
+    zoneBg.roundRect(zone.x, zone.y, zone.w, zone.h, 6);
+    zoneBg.stroke({ color: pColor, width: 1.5, alpha: 0.45 });
+    container.addChild(zoneBg);
+
+    drawCheckerPips(container, zCx, zCy, label, count, pColor, numFontH);
+
     if (zone.type === 'bar') {
       hitRegions.barAreas.push({ x: zone.x, y: zone.y, w: zone.w, h: zone.h });
     } else {
@@ -173,102 +196,80 @@ export function buildLinearBoard(app, container, game, state, theme, flipped, hi
     }
   }
 
-  // ── Dice in top strip ──────────────────────────────────────────────────
-  _drawDice(container, state, game, boardStartX, boardEndX, boardY, CY, TH, ZW, theme, isDark);
-
-  // ── Roll button in bottom strip ────────────────────────────────────────
-  _drawRollButton(container, state, boardStartX, boardEndX, CY, TH, boardY, BOARD_H, ZW, isDark, hitRegions);
+  // ── Floating dice + Roll + Undo (smaller dice to fit beside board) ───
+  drawFloatingDice(container, state, game, theme, isDark,
+    { showButtons: true, showUndo: true, hitRegions, dieSize: FLOAT_DIE });
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Internal helpers
 // ═════════════════════════════════════════════════════════════════════════════
 
-function _drawHighlights(gfx, state, boardStartX, PW, zones, theme, flipped, canvasH) {
-  const p  = state.currentPlayer;
-  const pp = i => boardStartX + (flipped ? (23 - i) : i) * PW;
+function _drawHomeBoardMarkers(container, game, boardStartX, boardEndX, boardY, BOARD_H, PW, CY, TH, flipped, is2P, bottomPlayer, topPlayer) {
+  const gfx = new Graphics();
+  const homeW = 6 * PW;
 
-  if (state.selectedPoint !== null) {
-    if (state.selectedPoint === 'bar') {
-      const z = zones.find(z => z.type === 'bar' && z.player === p);
-      if (z) { gfx.rect(z.x, z.y, z.w, z.h); gfx.fill(theme.selected); }
-    } else {
-      gfx.rect(pp(state.selectedPoint), 0, PW, canvasH);
-      gfx.fill(theme.selected);
-    }
+  if (is2P) {
+    // P0/bottomPlayer home is the 6 points nearest their OFF zone
+    const p0HomeX = flipped ? boardStartX : boardEndX - homeW;
+    const p1HomeX = flipped ? boardEndX - homeW : boardStartX;
+    const p0Color = game.players[bottomPlayer].color;
+    const p1Color = game.players[topPlayer].color;
+
+    // Bottom strip (P0 home)
+    gfx.rect(p0HomeX, CY + TH, homeW, boardY + BOARD_H - (CY + TH));
+    gfx.fill({ color: p0Color, alpha: 0.12 });
+    // Inner boundary line
+    const p0BoundX = flipped ? p0HomeX + homeW : p0HomeX;
+    gfx.moveTo(p0BoundX, CY + TH);
+    gfx.lineTo(p0BoundX, boardY + BOARD_H);
+    gfx.stroke({ width: 2, color: p0Color, alpha: 0.50 });
+
+    // Top strip (P1 home)
+    gfx.rect(p1HomeX, boardY, homeW, CY - TH - boardY);
+    gfx.fill({ color: p1Color, alpha: 0.12 });
+    const p1BoundX = flipped ? p1HomeX : p1HomeX + homeW;
+    gfx.moveTo(p1BoundX, boardY);
+    gfx.lineTo(p1BoundX, CY - TH);
+    gfx.stroke({ width: 2, color: p1Color, alpha: 0.50 });
+
+    // Also shade the diamond zone for the 6 home columns at very low alpha
+    gfx.rect(p0HomeX, CY - TH, homeW, TH * 2);
+    gfx.fill({ color: p0Color, alpha: 0.06 });
+    gfx.rect(p1HomeX, CY - TH, homeW, TH * 2);
+    gfx.fill({ color: p1Color, alpha: 0.06 });
+  } else {
+    // 1P: just P0's home on the right
+    const p0HomeX = boardEndX - homeW;
+    const p0Color = game.players[0].color;
+    gfx.rect(p0HomeX, CY + TH, homeW, boardY + BOARD_H - (CY + TH));
+    gfx.fill({ color: p0Color, alpha: 0.12 });
+    gfx.moveTo(p0HomeX, CY + TH);
+    gfx.lineTo(p0HomeX, boardY + BOARD_H);
+    gfx.stroke({ width: 2, color: p0Color, alpha: 0.50 });
+  }
+
+  container.addChild(gfx);
+}
+
+function _drawHighlights(gfx, state, boardStartX, PW, zones, theme, flipped, canvasH) {
+  // Diamond point highlights are handled by the pulse layer in pixi-renderer.js.
+  // Only highlight the BAR / OFF zones here (those aren't pointPolygons).
+  const p = state.currentPlayer;
+
+  if (state.selectedPoint === 'bar') {
+    const z = zones.find(z => z.type === 'bar' && z.player === p);
+    if (z) { gfx.rect(z.x, z.y, z.w, z.h); gfx.fill(theme.selected); }
   }
 
   for (const vm of state.validMoves) {
     if (vm === 'bearoff') {
       const z = zones.find(z => z.type === 'off' && z.player === p);
       if (z) { gfx.rect(z.x, z.y, z.w, z.h); gfx.fill(theme.validMove); }
-    } else {
-      gfx.rect(pp(vm), 0, PW, canvasH);
-      gfx.fill(theme.validMove);
     }
   }
 }
 
-function _drawZoneBox(container, zone, count, playerName, playerColor, theme) {
-  const { x, y, w, h, type } = zone;
-  const cx = x + w / 2;
-
-  const gfx = new Graphics();
-
-  // Tinted background
-  gfx.roundRect(x, y, w, h, 6);
-  gfx.fill({ color: playerColor, alpha: 0.16 });
-
-  // Coloured border
-  gfx.roundRect(x, y, w, h, 6);
-  gfx.stroke({ color: playerColor, width: 1.5, alpha: 0.55 });
-
-  container.addChild(gfx);
-
-  // Text
-  const labelSize  = Math.max(9, Math.floor(h * 0.22));
-  const countSize  = Math.max(8, Math.floor(h * 0.17));
-  const textGroupH = labelSize + (count > 0 ? countSize + 3 : 0);
-  const textStartY = y + (h - textGroupH) / 2;
-
-  const typeLabel = new Text({
-    text: type === 'bar' ? 'BAR' : 'OFF',
-    style: { fontFamily: 'Arial', fontWeight: 'bold', fontSize: labelSize, fill: playerColor },
-  });
-  typeLabel.anchor.set(0.5, 0);
-  typeLabel.x = cx;
-  typeLabel.y = textStartY;
-  container.addChild(typeLabel);
-
-  if (count > 0) {
-    const countLabel = new Text({
-      text: `\xd7${count}`,
-      style: { fontFamily: 'Arial', fontWeight: 'bold', fontSize: countSize, fill: playerColor },
-    });
-    countLabel.anchor.set(0.5, 0);
-    countLabel.x = cx;
-    countLabel.y = textStartY + labelSize + 3;
-    container.addChild(countLabel);
-  }
-
-  // Small checker dots
-  const dotAreaTop = textStartY + textGroupH + 4;
-  const dotAreaH   = y + h - dotAreaTop - 2;
-  const dotR = Math.min(5, dotAreaH / 2, w / 8);
-  if (dotR >= 3 && count > 0) {
-    const maxDots      = Math.floor(w / (dotR * 2 + 3));
-    const displayCount = Math.min(count, maxDots);
-    const dotsW = displayCount * (dotR * 2 + 3) - 3;
-    const dotX0 = cx - dotsW / 2 + dotR;
-    const dotY  = dotAreaTop + dotR;
-    const dots  = new Graphics();
-    for (let i = 0; i < displayCount; i++) {
-      dots.circle(dotX0 + i * (dotR * 2 + 3), dotY, dotR);
-      dots.fill(playerColor);
-    }
-    container.addChild(dots);
-  }
-}
 
 function _drawChevrons(container, game, boardStartX, boardEndX, boardY, CY, TH, BOARD_H, flipped) {
   const rightPlayer = flipped ? 1 : 0;
@@ -279,9 +280,10 @@ function _drawChevrons(container, game, boardStartX, boardEndX, boardY, CY, TH, 
   const topStripCY    = boardY + ((CY - TH) - boardY) / 2;
   const bottomStripCY = (CY + TH) + (boardY + BOARD_H - (CY + TH)) / 2;
 
-  const chevH   = Math.min((CY - TH - boardY) * 0.45, 20);
+  // Larger, bolder chevrons
+  const chevH   = Math.min((CY - TH - boardY) * 0.60, 28);
   const chevW   = chevH * 0.7;
-  const spacing = Math.max(36, (boardEndX - boardStartX) / 18);
+  const spacing = Math.max(36, (boardEndX - boardStartX) / 16);
   const boardW  = boardEndX - boardStartX;
   const count   = Math.floor(boardW / spacing);
   const offset  = (boardW - (count - 1) * spacing) / 2;
@@ -291,17 +293,17 @@ function _drawChevrons(container, game, boardStartX, boardEndX, boardY, CY, TH, 
   for (let i = 0; i < count; i++) {
     const x = boardStartX + offset + i * spacing;
 
-    // Top: leftward
-    _chevron(gfx, x, topStripCY, chevW, chevH, false, leftColor, 0.22);
-    // Bottom: rightward
-    _chevron(gfx, x, bottomStripCY, chevW, chevH, true, rightColor, 0.22);
+    // Top strip: leftward (toward left player's home)
+    _chevron(gfx, x, topStripCY, chevW, chevH, false, leftColor, 0.60);
+    // Bottom strip: rightward (toward right player's home)
+    _chevron(gfx, x, bottomStripCY, chevW, chevH, true, rightColor, 0.60);
   }
 
   container.addChild(gfx);
 }
 
 function _chevron(gfx, cx, cy, w, h, pointRight, color, alpha) {
-  const lw = Math.max(1.5, h * 0.13);
+  const lw = Math.max(2, h * 0.18);
 
   if (pointRight) {
     gfx.moveTo(cx - w / 2, cy - h / 2);
@@ -315,123 +317,3 @@ function _chevron(gfx, cx, cy, w, h, pointRight, color, alpha) {
   gfx.stroke({ width: lw, color, alpha, cap: 'round', join: 'round' });
 }
 
-function _drawDice(container, state, game, boardStartX, boardEndX, boardY, CY, TH, ZW, theme, isDark) {
-  if (state.dice.length === 0) return;
-
-  const playerColor = game.players[state.currentPlayer]?.color || 'gold';
-  const topAreaH    = (CY - TH) - boardY - 0;
-  if (topAreaH < 22) return;
-
-  const dieSize = topAreaH;
-  const gap     = Math.max(2, dieSize * 0.04);
-
-  const isDouble = state.dice.length === 2 && state.dice[0] === state.dice[1];
-  const display  = isDouble
-    ? [state.dice[0], state.dice[0], state.dice[0], state.dice[0]]
-    : [...state.dice];
-
-  const remaining = isDouble
-    ? state.movesLeft.filter(v => v === state.dice[0]).length
-    : 0;
-
-  const mlTrack = [...state.movesLeft];
-  const faces   = ['', '\u2680', '\u2681', '\u2682', '\u2683', '\u2684', '\u2685'];
-
-  const totalW = display.length * dieSize + (display.length - 1) * gap;
-  const startX = (boardStartX + boardEndX) / 2 - totalW / 2;
-  const startY = boardY;
-
-  display.forEach((val, i) => {
-    let used;
-    if (isDouble) {
-      used = i >= remaining;
-    } else {
-      const idx = mlTrack.indexOf(val);
-      used = idx === -1;
-      if (!used) mlTrack.splice(idx, 1);
-    }
-
-    const x = startX + i * (dieSize + gap);
-    const y = startY;
-
-    // Die body
-    const die = new Graphics();
-    die.roundRect(0, 0, dieSize, dieSize, 5);
-    die.fill(theme.barArea);
-    die.roundRect(0, 0, dieSize, dieSize, 5);
-    die.stroke({ color: used ? theme.boardBorder : playerColor, width: used ? 1 : 2 });
-    die.x = x;
-    die.y = y;
-    die.alpha = used ? 0.28 : 1;
-    container.addChild(die);
-
-    // Die face
-    const face = faces[val] || String(val);
-    const faceText = new Text({
-      text: face,
-      style: {
-        fontFamily: 'Arial',
-        fontSize: Math.floor(dieSize * 0.95),
-        fill: isDark ? '#ffffff' : '#1a1a1a',
-      },
-    });
-    faceText.anchor.set(0.5);
-    faceText.x = x + dieSize / 2;
-    faceText.y = y + dieSize / 2;
-    faceText.alpha = used ? 0.28 : 1;
-    container.addChild(faceText);
-  });
-}
-
-function _drawRollButton(container, state, boardStartX, boardEndX, CY, TH, boardY, BOARD_H, ZW, isDark, hitRegions) {
-  const canRoll = state.phase === 'rolling';
-
-  const stripH     = (boardY + BOARD_H) - (CY + TH);
-  const btnH       = Math.min(stripH - 10, 54);
-  const innerLeft  = boardStartX + ZW + 8;
-  const innerRight = boardEndX - ZW - 8;
-  const btnW       = Math.min(innerRight - innerLeft, 220);
-  const btnX       = (innerLeft + innerRight) / 2 - btnW / 2;
-  const btnY       = (CY + TH) + (stripH - btnH) / 2;
-  const radius     = btnH / 2;
-
-  if (canRoll) {
-    hitRegions.rollArea.push({ x: btnX, y: btnY, w: btnW, h: btnH });
-  }
-
-  const btn = new Graphics();
-  const accent = '#e94560';
-
-  // Button body
-  btn.roundRect(btnX, btnY, btnW, btnH, radius);
-  btn.fill(canRoll ? accent : (isDark ? '#2a2a4a' : '#b8a99a'));
-  btn.alpha = canRoll ? 1 : 0.35;
-
-  // Subtle highlight on active button
-  if (canRoll) {
-    const hl = new Graphics();
-    hl.roundRect(btnX + 2, btnY + 2, btnW - 4, btnH / 2 - 2, radius - 1);
-    hl.fill({ color: 0xffffff, alpha: 0.12 });
-    container.addChild(btn);
-    container.addChild(hl);
-  } else {
-    container.addChild(btn);
-  }
-
-  // Label
-  const fontSize = Math.min(btnH * 0.42, 22);
-  const label = new Text({
-    text: canRoll ? '\ud83c\udfb2  Roll Dice' : '\u2014 Moving \u2014',
-    style: {
-      fontFamily: 'Arial',
-      fontWeight: 'bold',
-      fontSize,
-      fill: canRoll ? '#ffffff' : (isDark ? '#556' : '#8a7a6a'),
-    },
-  });
-  label.anchor.set(0.5);
-  label.x = btnX + btnW / 2;
-  label.y = btnY + btnH / 2;
-  label.alpha = canRoll ? 1 : 0.35;
-  container.addChild(label);
-}
