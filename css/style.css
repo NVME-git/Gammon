@@ -762,6 +762,48 @@ body {
   line-height: 1.45;
 }
 
+.p2p-hero {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  background: linear-gradient(135deg, var(--card-bg) 0%, color-mix(in srgb, var(--accent) 8%, var(--card-bg)) 100%);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.p2p-hero-icon {
+  font-size: 2rem;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+.p2p-hero-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.p2p-hero-body strong {
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.p2p-hero-body p {
+  font-size: 0.82rem;
+  color: var(--subtext);
+  line-height: 1.5;
+  margin: 0;
+}
+.p2p-docs-link-hero {
+  display: inline-block;
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  transition: opacity 0.15s;
+}
+.p2p-docs-link-hero:hover { opacity: 0.8; }
+
 .p2p-label {
   font-size: 0.9rem;
   color: var(--text);

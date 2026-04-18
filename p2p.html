@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>P2P Architecture — Gammon</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    /* ── Base ── */
+    :root {
+      --bg:        #0f0f1a;
+      --surface:   #1a1a2e;
+      --surface2:  #16213e;
+      --border:    #2a2a4a;
+      --text:      #e8e8f0;
+      --muted:     #8888aa;
+      --accent:    #6c63ff;
+      --accent2:   #00d4aa;
+      --warn:      #f5a623;
+      --danger:    #e74c3c;
+      --green:     #2ecc71;
+      --code-bg:   #0d1117;
+      --radius:    10px;
+    }
+    [data-theme="light"] {
+      --bg:        #f0f0f8;
+      --surface:   #ffffff;
+      --surface2:  #f5f5ff;
+      --border:    #d0d0e8;
+      --text:      #1a1a2e;
+      --muted:     #666688;
+      --code-bg:   #f6f8fa;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+
+    /* ── Layout ── */
+    .page { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+    /* ── Nav ── */
+    .top-nav {
+      display: flex; align-items: center; gap: 1rem;
+      padding: .75rem 1.5rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .top-nav a {
+      color: var(--accent); text-decoration: none; font-size: 14px;
+      padding: .35rem .75rem; border-radius: 6px;
+      border: 1px solid var(--border);
+      transition: background .15s;
+    }
+    .top-nav a:hover { background: var(--border); }
+    .top-nav .title { font-weight: 700; font-size: 16px; margin-left: auto; color: var(--muted); }
+    .theme-btn {
+      margin-left: .5rem; cursor: pointer;
+      background: none; border: 1px solid var(--border);
+      color: var(--text); padding: .3rem .6rem; border-radius: 6px;
+      font-size: 14px;
+    }
+
+    /* ── Typography ── */
+    h1 { font-size: 2rem; margin-bottom: .4rem; }
+    h2 { font-size: 1.35rem; margin: 2.5rem 0 .75rem; color: var(--accent2); border-bottom: 1px solid var(--border); padding-bottom: .4rem; }
+    h3 { font-size: 1.05rem; margin: 1.5rem 0 .5rem; color: var(--warn); }
+    p  { margin-bottom: .9rem; color: var(--text); }
+    .lead { font-size: 1.05rem; color: var(--muted); margin-bottom: 1.5rem; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+    @media (max-width: 600px) { .card-row { grid-template-columns: 1fr; } }
+
+    /* ── Code ── */
+    pre, code {
+      font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 13px;
+    }
+    code {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: .15em .4em;
+      color: var(--accent2);
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      margin-bottom: 1rem;
+    }
+    pre code { background: none; border: none; padding: 0; color: inherit; }
+
+    /* ── Diagrams ── */
+    .diagram-wrap {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem 1.5rem;
+      margin-bottom: 1.25rem;
+      overflow-x: auto;
+      text-align: center;
+    }
+    .diagram-wrap .mermaid {
+      display: block;
+      width: 100%;
+      text-align: center;
+    }
+    .diagram-wrap .mermaid svg {
+      max-width: 100% !important;
+      height: auto !important;
+      min-height: 320px;
+    }
+
+    /* ── Message table ── */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; font-size: 13.5px; }
+    th { background: var(--surface2); color: var(--accent2); text-align: left; padding: .6rem .8rem; border: 1px solid var(--border); }
+    td { padding: .55rem .8rem; border: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: var(--surface2); }
+    td code { font-size: 12px; }
+
+    /* ── Chips ── */
+    .chip {
+      display: inline-block;
+      padding: .2rem .55rem;
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-weight: 600;
+      margin-right: .25rem;
+    }
+    .chip-host  { background: #6c63ff33; color: #a09aff; border: 1px solid #6c63ff55; }
+    .chip-guest { background: #00d4aa22; color: #00d4aa;  border: 1px solid #00d4aa44; }
+    .chip-both  { background: #f5a62322; color: #f5a623;  border: 1px solid #f5a62344; }
+
+    /* ── Turn flow ── */
+    .turn-block {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    @media (max-width: 600px) { .turn-block { grid-template-columns: 1fr; } }
+    .turn-col {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+    }
+    .turn-col h4 { font-size: .9rem; margin-bottom: .6rem; }
+    .turn-col.host-col  h4 { color: #a09aff; }
+    .turn-col.guest-col h4 { color: #00d4aa; }
+    .step { display: flex; gap: .5rem; margin-bottom: .4rem; font-size: 13.5px; }
+    .step-num {
+      min-width: 1.4rem; height: 1.4rem;
+      background: var(--border); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; flex-shrink: 0;
+    }
+    .arrow-msg {
+      background: var(--surface);
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      padding: .4rem .75rem;
+      font-size: 12.5px;
+      color: var(--warn);
+      margin: .3rem 0 .6rem;
+      text-align: center;
+    }
+
+    /* ── Highlight boxes ── */
+    .note {
+      background: #6c63ff15;
+      border-left: 3px solid var(--accent);
+      padding: .6rem 1rem;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 1rem;
+      font-size: 13.5px;
+      color: var(--muted);
+    }
+    .warn-note {
+      background: #f5a62315;
+      border-left: 3px solid var(--warn);
+      padding: .6rem 1rem;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 1rem;
+      font-size: 13.5px;
+    }
+    .info-note {
+      background: #00d4aa12;
+      border-left: 3px solid var(--accent2);
+      padding: .6rem 1rem;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 1rem;
+      font-size: 13.5px;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a href="index.html">← Back to Game</a>
+  <span class="title">P2P Architecture</span>
+  <button class="theme-btn" id="theme-btn">☀️</button>
+</nav>
+
+<div class="page">
+
+  <h1>🌐 How Gammon P2P Works</h1>
+  <p class="lead">
+    Gammon uses browser-to-browser WebRTC data channels via
+    <a href="https://peerjs.com" target="_blank" rel="noopener" style="color:var(--accent)">PeerJS</a>
+    for multiplayer — no game server, no accounts, no install.
+    One player's browser acts as host and source of truth; guests connect directly to it.
+  </p>
+
+  <div class="note">
+    <strong>Player numbering:</strong> Players are numbered 1–4 in the game UI.
+    Internally the code uses 0-based indices (<code>playerIndex 0</code> = Player 1 / Host,
+    <code>1</code> = Player 2 / first Guest, and so on).
+    This page uses the human-friendly 1-based numbering throughout.
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <h2>1. System Architecture</h2>
+
+  <p>
+    The host browser generates a random <strong>PeerJS peer ID</strong> which becomes the room code.
+    Guests use the share link (<code>?room=&lt;peerId&gt;</code>) to open a WebRTC
+    <code>DataConnection</code> directly to the host. PeerJS's free cloud servers handle only the
+    initial ICE/STUN handshake — all game data flows peer-to-peer after that.
+  </p>
+
+  <div class="diagram-wrap">
+    <div class="mermaid">
+graph LR
+    subgraph PeerJS["PeerJS Cloud (STUN / signalling only)"]
+        S[("☁ PeerJS\nServer")]
+    end
+    subgraph HA["Host Browser"]
+        H["🟣 Player 1\n(Host)"]
+    end
+    subgraph GA["Guest A Browser"]
+        G1["🟢 Player 2\n(Guest A)"]
+    end
+    subgraph GB["Guest B Browser"]
+        G2["🟡 Player 3\n(Guest B)"]
+    end
+
+    H  -- "register peer ID\n[ICE handshake]" --> S
+    G1 -- "peer.connect(hostId)\n[ICE handshake]" --> S
+    S  -. "peer IDs exchanged" .-> H
+    S  -. "peer IDs exchanged" .-> G1
+
+    H  <-->|"WebRTC DataChannel\n(game JSON)"| G1
+    H  <-->|"WebRTC DataChannel\n(game JSON)"| G2
+    G1 x--x|"no direct link"| G2
+
+    style PeerJS fill:#1a1a2e,stroke:#6c63ff,color:#a09aff
+    style HA    fill:#1a1a2e,stroke:#6c63ff55
+    style GA    fill:#1a1a2e,stroke:#00d4aa55
+    style GB    fill:#1a1a2e,stroke:#f5a62355
+    </div>
+  </div>
+
+  <div class="note">
+    Guests have no direct connection to each other. When a guest sends a state update,
+    the host rebroadcasts it to every other guest — the host is always the relay and arbiter.
+  </div>
+
+  <div class="card-row">
+    <div class="card">
+      <h3>Host browser (Player 1)</h3>
+      <p>Runs <code>new Peer()</code> — PeerJS assigns a random UUID as the room ID.
+         Listens for incoming connections. Owns the canonical game state.
+         Rebroadcasts every <code>state</code> message it receives from a guest.</p>
+    </div>
+    <div class="card">
+      <h3>Guest browser (Player 2+)</h3>
+      <p>Reads <code>?room=&lt;id&gt;</code> from the URL and calls
+         <code>peer.connect(hostId)</code>. On connection open, immediately sends
+         <code>request_state</code> so it can catch up to the current game.</p>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <h2>2. Connection Setup Flow</h2>
+
+  <div class="diagram-wrap">
+    <div class="mermaid">
+sequenceDiagram
+    participant H  as 🟣 Player 1 (Host)
+    participant PS as ☁ PeerJS cloud
+    participant G  as 🟢 Player 2 (Guest)
+
+    H  ->> PS : new Peer() — register
+    PS -->> H : peer.on open — peerId assigned
+    Note over H: shareLink = baseURL + ?room=peerId
+
+    Note over G: user opens shareLink
+    G  ->> PS : new Peer() — register
+    PS -->> G : guest peer ID assigned
+    G  ->> PS : peer.connect(hostPeerId)
+    PS ->> H  : peer.on connection
+    Note over H,G: WebRTC DataChannel opens — direct
+
+    G  ->> H  : request_state (claimedIndex if available)
+    alt game not started yet
+        H  ->> G  : waiting
+    else game in progress
+        H  ->> G  : assign — playerIndex plus full save
+    end
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <h2>3. Page Reload &amp; Seat Reclaim</h2>
+
+  <p>
+    A player who reloads the page (or loses their connection) can rejoin mid-game and
+    reclaim their original seat — the board picks up exactly where they left off.
+  </p>
+
+  <div class="diagram-wrap">
+    <div class="mermaid">
+sequenceDiagram
+    participant G  as 🟢 Player 2 (Guest)
+    participant LS as 💾 localStorage
+    participant H  as 🟣 Player 1 (Host)
+
+    Note over G: page reload — ?room= still in URL
+    G  ->> LS : read gammon_seat
+    LS -->> G : roomId + playerIndex + timestamp
+
+    alt TTL expired (over 2 hours) or wrong room
+        G  ->> H  : request_state (no claimedIndex)
+        H  -->> G : assign — new playerIndex allocated
+    else valid saved seat
+        G  ->> H  : request_state + claimedIndex 1
+        alt seat is still free
+            H  -->> G : assign — playerIndex 1 restored
+            Note over G: rejoins as Player 2, game resumes
+        else seat already taken by someone else
+            H  -->> G : assign — new playerIndex allocated
+        end
+    end
+
+    G  ->> LS : write gammon_seat with new playerIndex + timestamp
+    </div>
+  </div>
+
+  <div class="info-note">
+    The saved seat is stored in <code>localStorage</code> as
+    <code>{ roomId, playerIndex, timestamp }</code>.
+    The host honours a <code>claimedIndex</code> only if that seat is not currently occupied
+    by an active connection — protecting against two browsers claiming the same player slot.
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <h2>4. Game Turn Flow</h2>
+
+  <p>Two representative turns — Turn 1 is Player 1's (Host) turn, Turn 2 is Player 2's (Guest) turn.</p>
+
+  <h3>Turn 1 — Player 1 (Host) moves</h3>
+  <div class="turn-block">
+    <div class="turn-col host-col">
+      <h4>🟣 Player 1 — Host</h4>
+      <div class="step"><span class="step-num">1</span><span>Clicks Roll — <code>game.roll()</code> runs locally</span></div>
+      <div class="step"><span class="step-num">2</span><span>Selects checker, clicks point — <code>game.moveChecker()</code></span></div>
+      <div class="step"><span class="step-num">3</span><span>Last die used → <code>phase</code> flips to <code>'rolling'</code>, <code>_pendingConfirm = true</code></span></div>
+      <div class="step"><span class="step-num">4</span><span>Green <strong>✓ End Turn</strong> button appears; can still undo</span></div>
+      <div class="step"><span class="step-num">5</span><span>Clicks End Turn → <code>network.syncState(game.exportSave())</code></span></div>
+    </div>
+    <div class="turn-col guest-col">
+      <h4>🟢 Player 2 — Guest</h4>
+      <div class="step"><span class="step-num">1</span><span>Board locked — roll button disabled (not their turn)</span></div>
+      <div class="step"><span class="step-num">2</span><span>Watches moves reflected after each confirmed sync</span></div>
+      <div class="step"><span class="step-num">3</span><span>—</span></div>
+      <div class="step"><span class="step-num">4</span><span>—</span></div>
+      <div class="step"><span class="step-num">5</span><span>Receives state message → <code>game.importSave(save)</code> → now their turn</span></div>
+    </div>
+  </div>
+
+  <div class="arrow-msg">→  { type: 'state', save: { currentPlayer: 1, phase: 'rolling', … } }  →</div>
+
+  <h3>Turn 2 — Player 2 (Guest) moves</h3>
+  <div class="turn-block">
+    <div class="turn-col host-col">
+      <h4>🟣 Player 1 — Host</h4>
+      <div class="step"><span class="step-num">1</span><span>Board locked — not their turn</span></div>
+      <div class="step"><span class="step-num">2</span><span>—</span></div>
+      <div class="step"><span class="step-num">3</span><span>Receives state from guest → rebroadcasts to any other guests → Player 1's turn again</span></div>
+    </div>
+    <div class="turn-col guest-col">
+      <h4>🟢 Player 2 — Guest</h4>
+      <div class="step"><span class="step-num">1</span><span>Board unlocked — rolls and moves</span></div>
+      <div class="step"><span class="step-num">2</span><span>Last die used → <code>_pendingConfirm = true</code></span></div>
+      <div class="step"><span class="step-num">3</span><span>Clicks <strong>✓ End Turn</strong> → sends state to host</span></div>
+    </div>
+  </div>
+
+  <div class="arrow-msg">←  { type: 'state', save: { currentPlayer: 0, phase: 'rolling', … } }  ←</div>
+
+  <div class="warn-note">
+    The <strong>End Turn</strong> button exists to let a player review and optionally undo their
+    last move before it is broadcast. The state is <em>never sent</em> until the player
+    explicitly confirms — protecting against mis-clicks.
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <h2>5. Extra Players (Spectators)</h2>
+
+  <p>
+    The host does not cap incoming connections at the game's player count.
+    A fifth person can join a four-player Quadgammon game and the room link will still work.
+    Here is what happens:
+  </p>
+
+  <div class="diagram-wrap">
+    <div class="mermaid">
+flowchart TD
+    A["New connection from browser X"] --> B["Host assigns next available playerIndex\ne.g. index 4 for a 4-player game"]
+    B --> C["assignGuest sends assign message\nwith full save and playerIndex 4"]
+    C --> D["Guest receives assign — sets localPlayerIndex = 4"]
+    D --> E{playerIndex less than numPlayers?}
+    E -- yes --> F["Active player — Roll + Move enabled on their turn"]
+    E -- no  --> G["Spectator — board visible, Roll + Move locked every turn\ncurrentPlayer never equals localPlayerIndex"]
+    G --> H["Spectator sees all moves in real time\nvia normal state broadcasts"]
+    </div>
+  </div>
+
+  <div class="info-note">
+    Spectators receive every <code>state</code> broadcast and see the board update in real time.
+    They simply can never become the active player because <code>currentPlayer</code>
+    only cycles through indices 0 to <code>numPlayers − 1</code>.
+    No special handling or UI message is shown — the board just stays locked.
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <h2>6. Message Protocol</h2>
+
+  <p>All messages are plain JSON strings sent over a reliable WebRTC
+  <code>DataConnection</code>. Every message has a <code>type</code> discriminant.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>type</th>
+        <th>Direction</th>
+        <th>Payload fields</th>
+        <th>Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>assign</code></td>
+        <td><span class="chip chip-host">Host → Guest</span></td>
+        <td><code>playerIndex: number</code><br><code>save: GameSave</code></td>
+        <td>Tells a guest which seat they occupy and hands them the full current game state. playerIndex is 0-based internally (0 = Player 1).</td>
+      </tr>
+      <tr>
+        <td><code>state</code></td>
+        <td><span class="chip chip-both">Any → All</span></td>
+        <td><code>save: GameSave</code></td>
+        <td>Full game snapshot after a confirmed turn. Host rebroadcasts to all other peers.</td>
+      </tr>
+      <tr>
+        <td><code>waiting</code></td>
+        <td><span class="chip chip-host">Host → Guest</span></td>
+        <td><em>none</em></td>
+        <td>Game not yet started — guest shows a waiting screen.</td>
+      </tr>
+      <tr>
+        <td><code>request_state</code></td>
+        <td><span class="chip chip-guest">Guest → Host</span></td>
+        <td><code>claimedIndex?: number</code></td>
+        <td>Sent immediately on connection open. Asks host for current state and optionally tries to reclaim a saved seat.</td>
+      </tr>
+      <tr>
+        <td><code>hit</code></td>
+        <td><span class="chip chip-both">Any → All</span></td>
+        <td><code>attacker: number</code><br><code>defender: number</code></td>
+        <td>Triggers elimination animation on all peers when a checker is hit to the bar.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>GameSave shape</h3>
+  <pre><code>{
+  mode:          "bigammon" | "trigammon" | "quadgammon" | "unigammon",
+  numPlayers:    2 | 3 | 4,
+  players:       [ { name, color }, … ],          // players[0] = Player 1
+  points:        number[][],   // points[playerIndex][pointIndex] = checkerCount
+  bar:           number[],     // bar[playerIndex] = checkerCount on bar
+  borneOff:      number[],     // borneOff[playerIndex] = count borne off
+  currentPlayer: number,       // 0-based index of the player whose turn it is
+  phase:         "rolling" | "moving",
+  dice:          number[],
+  usedDice:      boolean[],
+  moveHistory:   MoveRecord[]
+}</code></pre>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <h2>7. State Diagrams</h2>
+
+  <h3>Player 1 / Host perspective</h3>
+  <div class="diagram-wrap">
+    <div class="mermaid">
+stateDiagram-v2
+    [*]           --> Idle
+
+    Idle          --> Hosting       : startHosting — peer ID assigned
+    Hosting       --> WaitingGuests : waiting for guests
+    Hosting       --> InGame        : New Game with no guests
+    WaitingGuests --> InGame        : New Game clicked
+
+    state InGame {
+        [*]             --> MyTurn        : currentPlayer is 0
+        [*]             --> WatchingTurn  : another player goes first
+
+        MyTurn          --> Rolling       : phase is rolling
+        Rolling         --> Moving        : Roll clicked
+        Moving          --> PendingConfirm: last die used
+        PendingConfirm  --> Moving        : Undo clicked
+        PendingConfirm  --> Syncing       : End Turn clicked
+        Syncing         --> WatchingTurn  : state broadcast sent
+
+        WatchingTurn    --> MyTurn        : state received and now my turn
+    }
+
+    InGame        --> Idle          : Back to menu or disconnect
+    </div>
+  </div>
+
+  <h3>Player 2+ / Guest perspective</h3>
+  <div class="diagram-wrap">
+    <div class="mermaid">
+stateDiagram-v2
+    [*]           --> Connecting
+
+    Connecting    --> Waiting       : waiting message received
+    Connecting    --> InGame        : assign message received
+
+    Waiting       --> InGame        : assign message received after game starts
+
+    state InGame {
+        [*]             --> WatchingTurn  : not my turn on arrival
+        [*]             --> MyTurn        : my turn on arrival
+
+        WatchingTurn    --> MyTurn        : state received and currentPlayer matches me
+        MyTurn          --> Rolling       : phase is rolling
+        Rolling         --> Moving        : Roll clicked
+        Moving          --> PendingConfirm: last die used
+        PendingConfirm  --> Moving        : Undo clicked
+        PendingConfirm  --> Syncing       : End Turn clicked
+        Syncing         --> WatchingTurn  : state sent to host
+    }
+
+    InGame        --> Reconnecting  : connection dropped
+    Reconnecting  --> Connecting    : page reload with room param in URL
+    InGame        --> [*]           : Back to menu
+    </div>
+  </div>
+
+  <h3>Host rebroadcast logic</h3>
+  <div class="diagram-wrap">
+    <div class="mermaid">
+flowchart TD
+    A["Message received from peer X"] --> B{type?}
+
+    B -- state --> C["onStateReceived — game.importSave\nupdate local board"]
+    C --> D{is host?}
+    D -- yes --> E["broadcast state to all peers except X"]
+    D -- no  --> F["done — only host relays"]
+
+    B -- hit --> G["play elimination animation"]
+    G --> D
+
+    B -- request_state --> H{is host?}
+    H -- yes --> I["look up or assign playerIndex for X\nassignGuest sends assign message"]
+    H -- no  --> J["ignore — guests do not answer requests"]
+
+    B -- assign --> K["set localPlayerIndex from data\nimportSave — join game in progress"]
+
+    B -- waiting --> L["show waiting screen"]
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <h2>8. Key Implementation Notes</h2>
+
+  <div class="card">
+    <h3>No server required after handshake</h3>
+    <p>PeerJS's free cloud is only used for WebRTC ICE negotiation (exchanging candidate addresses).
+    Once <code>DataConnection.open</code> fires, all traffic is direct browser-to-browser UDP/SCTP.
+    If both peers are behind restrictive NATs, PeerJS falls back to its TURN relay automatically.</p>
+  </div>
+
+  <div class="card">
+    <h3>State-sync model: full snapshots, not deltas</h3>
+    <p>Every <code>state</code> message carries the complete <code>GameSave</code> object — not a diff.
+    This keeps the protocol simple and makes late-joining and reconnection trivial:
+    the host just sends its current snapshot with no diff-tracking logic needed.</p>
+  </div>
+
+  <div class="card">
+    <h3>Turn enforcement</h3>
+    <p>The UI layer in <code>main.js</code> checks
+    <code>game.currentPlayer === network.localPlayerIndex</code> before processing any roll or
+    move click. Guests physically cannot send a state update out of turn because the Roll button
+    is disabled and click events are dropped when it is not their turn.</p>
+  </div>
+
+  <div class="card">
+    <h3>Checker-hit animation sync</h3>
+    <p>When the active player's checker hits an opponent's blot, the active player's browser sends
+    a separate <code>hit</code> message in addition to the normal <code>state</code> sync.
+    This lets all peers play the pixel-art elimination animation in parallel without embedding
+    animation state in the save object.</p>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+  // Apply saved theme before mermaid renders to avoid a flash
+  const savedTheme = localStorage.getItem('gammon_theme');
+  if (savedTheme === 'light') {
+    document.documentElement.dataset.theme = 'light';
+    document.getElementById('theme-btn').textContent = '🌙';
+  }
+
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: document.documentElement.dataset.theme === 'light' ? 'default' : 'dark',
+    useMaxWidth: true,
+    flowchart:    { useMaxWidth: true, htmlLabels: true },
+    sequence:     { useMaxWidth: true, width: 180 },
+    stateDiagram: { useMaxWidth: true },
+    themeVariables: {
+      primaryColor:      '#6c63ff',
+      primaryTextColor:  '#e8e8f0',
+      primaryBorderColor:'#2a2a4a',
+      lineColor:         '#8888aa',
+      secondaryColor:    '#1a1a2e',
+      tertiaryColor:     '#16213e',
+      fontSize:          '15px',
+    },
+  });
+
+  document.getElementById('theme-btn').addEventListener('click', () => {
+    const html   = document.documentElement;
+    const isDark = html.dataset.theme !== 'light';
+    html.dataset.theme = isDark ? 'light' : 'dark';
+    document.getElementById('theme-btn').textContent = isDark ? '🌙' : '☀️';
+    location.reload();
+  });
+</script>
+</body>
+</html>
