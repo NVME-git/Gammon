@@ -105,10 +105,13 @@ export class PixelArt {
     defCanvas.width  = 64 * dpr; defCanvas.height = 64 * dpr;
     PixelArt.drawCharacter(defCanvas, defenderColor);
 
-    const TOTAL = 48;
-    let frame = 0;
+    const TOTAL = 24;  // ~400ms at 60fps
+    let frame     = 0;
+    let cancelled = false;
 
     const tick = () => {
+      if (cancelled) { callback && callback(); return; }
+
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = 'rgba(0,0,0,0.82)';
       ctx.fillRect(0, 0, W, H);
@@ -133,7 +136,7 @@ export class PixelArt {
 
       // Effect word + emoji
       if (frame < TOTAL * 0.65) {
-        const scale = frame < 12 ? frame / 12 : 1 - Math.max(0, frame - 40) * 0.012;
+        const scale = frame < 6 ? frame / 6 : 1 - Math.max(0, frame - 20) * 0.025;
         ctx.save();
         ctx.translate(W / 2 - 10, H / 2 - 70);
         ctx.scale(scale * 2.4, scale * 2.4);
@@ -158,6 +161,12 @@ export class PixelArt {
         ctx.globalAlpha = 1;
       }
 
+      // "tap to skip" hint
+      ctx.font = '12px Arial';
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.textAlign = 'right';
+      ctx.fillText('tap to skip', W - 10, H - 10);
+
       frame++;
       if (frame < TOTAL) {
         requestAnimationFrame(tick);
@@ -167,6 +176,9 @@ export class PixelArt {
     };
 
     requestAnimationFrame(tick);
+
+    // Return a cancel function so the caller can skip the animation early
+    return () => { cancelled = true; };
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────

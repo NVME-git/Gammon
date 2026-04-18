@@ -1,5 +1,20 @@
-import { Graphics, Text, Sprite } from 'pixi.js';
+import { Graphics, Text, Sprite, Texture } from 'pixi.js';
 import { getCheckerTexture } from '../textures.js';
+import { PixelArt } from '../pixelart.js';
+
+// ─── Avatar texture cache (keyed by `playerIdx_color`) ───────────────────────
+const _avatarTextures = new Map();
+
+function _getAvatarTexture(playerIdx, color) {
+  const key = `${playerIdx}_${color}`;
+  if (_avatarTextures.has(key)) return _avatarTextures.get(key);
+  const c = document.createElement('canvas');
+  c.width = 48; c.height = 48;
+  PixelArt.drawCharacter(c, color);
+  const tex = Texture.from(c);
+  _avatarTextures.set(key, tex);
+  return tex;
+}
 
 // ─── Shared panel width constant (used by tri + quad boards) ─────────────────
 export const SIDE_PANEL_W = 148;
@@ -111,13 +126,15 @@ function _drawRollBtn(container, state, bx, by, bw, bh, radius, isDark, canRoll,
 // opts.dieSize      — die cell size in px (default 92; pass 72 for linear boards)
 // Returns the pixel width of the cluster box (useful for callers that need to offset the board)
 export function drawFloatingDice(container, state, game, theme, isDark, opts = {}) {
-  const { showButtons = false, showUndo = false, hitRegions = null, dieSize = 92 } = opts;
+  const { showButtons = false, showUndo = false, hitRegions = null, dieSize = 92, myTurn = true, isOnline = false, pendingConfirm = false, pendingPlayer = null } = opts;
   const FPAD_X = 14;   // distance from left canvas edge
   const FPAD_Y = 62;   // distance from top — clears the floating ← Menu / ↻ buttons (38px + 10px gap)
   const PAD    =  8;   // internal padding
   const faces = ['', '\u2680', '\u2681', '\u2682', '\u2683', '\u2684', '\u2685'];
 
-  const cp          = state.currentPlayer;
+  // During pendingConfirm, keep showing the player who just finished their turn
+  // (pendingPlayer) rather than switching to the next player prematurely.
+  const cp          = (pendingConfirm && pendingPlayer !== null) ? pendingPlayer : state.currentPlayer;
   const playerColor = game.players[cp]?.color || 'gold';
   const pName       = game.players[cp]?.name  || '';
 
@@ -128,13 +145,15 @@ export function drawFloatingDice(container, state, game, theme, isDark, opts = {
   const numDice  = display.length;
 
   // 2-column grid so doublets become 2×2 instead of 4×1
-  const nameH    = 16;
-  const stripeH  = 4;
-  const COLS     = 2;
-  const numRows  = numDice > 0 ? Math.ceil(numDice / COLS) : 0;
-  const boxW     = COLS * dieSize + (COLS + 1) * PAD;
+  const nameH     = 16;
+  const stripeH   = 4;
+  const avatarH   = 36;
+  const avatarGap = 4;
+  const COLS      = 2;
+  const numRows   = numDice > 0 ? Math.ceil(numDice / COLS) : 0;
+  const boxW      = COLS * dieSize + (COLS + 1) * PAD;
   const diceAreaH = numRows > 0 ? numRows * dieSize + (numRows - 1) * 6 : 0;
-  const boxH     = stripeH + PAD + nameH + (diceAreaH > 0 ? PAD + diceAreaH : 0) + PAD;
+  const boxH      = stripeH + PAD + nameH + avatarGap + avatarH + (diceAreaH > 0 ? PAD + diceAreaH : 0) + PAD;
 
   // Background
   const bg = new Graphics();
@@ -160,10 +179,20 @@ export function drawFloatingDice(container, state, game, theme, isDark, opts = {
   nameText.y = FPAD_Y + stripeH + PAD / 2;
   container.addChild(nameText);
 
+  // Player avatar below name
+  const avTex    = _getAvatarTexture(cp, playerColor);
+  const avSprite = new Sprite(avTex);
+  avSprite.anchor.set(0.5, 0);
+  avSprite.x = FPAD_X + boxW / 2;
+  avSprite.y = FPAD_Y + stripeH + PAD + nameH + avatarGap;
+  avSprite.width  = avatarH;
+  avSprite.height = avatarH;
+  container.addChild(avSprite);
+
   if (numDice > 0) {
     const remaining = isDouble ? state.movesLeft.filter(v => v === state.dice[0]).length : 0;
     const mlTrack   = [...state.movesLeft];
-    const startY    = FPAD_Y + stripeH + PAD + nameH + PAD;
+    const startY    = FPAD_Y + stripeH + PAD + nameH + avatarGap + avatarH + PAD;
 
     display.forEach((val, i) => {
       let used;
@@ -204,43 +233,67 @@ export function drawFloatingDice(container, state, game, theme, isDark, opts = {
     });
   }
 
-  // ── Floating Roll + Undo buttons directly below the dice box ─────────────────
+  // ── Floating Roll / End-Turn + Undo buttons directly below the dice box ──────
   if (showButtons) {
-    const canRoll = state.phase === 'rolling';
-    const canUndo = showUndo && game.canUndo();
+    const canRoll = state.phase === 'rolling' && myTurn && !pendingConfirm;
+    const canUndo = showUndo && game.canUndo() && (myTurn || pendingConfirm);
     const btnH    = 46;
     const btnR    = 10;
     const gap     = 8;
 
-    // Roll button
     const rollY = FPAD_Y + boxH + gap;
 
-    const rollGfx = new Graphics();
-    rollGfx.roundRect(FPAD_X, rollY, boxW, btnH, btnR);
-    rollGfx.fill(canRoll ? '#e94560' : (isDark ? '#2a2a4a' : '#b8a99a'));
-    rollGfx.alpha = canRoll ? 1 : 0.40;
-    container.addChild(rollGfx);
+    if (pendingConfirm) {
+      // ── "End Turn" confirmation button (green) ──────────────────────────────
+      const confirmGfx = new Graphics();
+      confirmGfx.roundRect(FPAD_X, rollY, boxW, btnH, btnR);
+      confirmGfx.fill('#27ae60');
+      container.addChild(confirmGfx);
 
-    if (canRoll) {
-      const rollHl = new Graphics();
-      rollHl.roundRect(FPAD_X + 2, rollY + 2, boxW - 4, btnH / 2 - 2, btnR - 1);
-      rollHl.fill({ color: 0xffffff, alpha: 0.12 });
-      container.addChild(rollHl);
+      const confirmHl = new Graphics();
+      confirmHl.roundRect(FPAD_X + 2, rollY + 2, boxW - 4, btnH / 2 - 2, btnR - 1);
+      confirmHl.fill({ color: 0xffffff, alpha: 0.12 });
+      container.addChild(confirmHl);
+
+      const confirmLabel = new Text({
+        text: '\u2713 End Turn',
+        style: { fontFamily: 'Arial', fontWeight: 'bold', fontSize: Math.min(btnH * 0.42, 20), fill: '#ffffff' },
+      });
+      confirmLabel.anchor.set(0.5);
+      confirmLabel.x = FPAD_X + boxW / 2;
+      confirmLabel.y = rollY + btnH / 2;
+      container.addChild(confirmLabel);
+
+      if (hitRegions) hitRegions.confirmArea.push({ x: FPAD_X, y: rollY, w: boxW, h: btnH });
+    } else {
+      // ── Roll button ─────────────────────────────────────────────────────────
+      const rollGfx = new Graphics();
+      rollGfx.roundRect(FPAD_X, rollY, boxW, btnH, btnR);
+      rollGfx.fill(canRoll ? '#e94560' : (isDark ? '#2a2a4a' : '#b8a99a'));
+      rollGfx.alpha = canRoll ? 1 : 0.40;
+      container.addChild(rollGfx);
+
+      if (canRoll) {
+        const rollHl = new Graphics();
+        rollHl.roundRect(FPAD_X + 2, rollY + 2, boxW - 4, btnH / 2 - 2, btnR - 1);
+        rollHl.fill({ color: 0xffffff, alpha: 0.12 });
+        container.addChild(rollHl);
+      }
+
+      const rollLabel = new Text({
+        text: canRoll ? '\ud83c\udfb2  Roll Dice' : '\u2014 Moving \u2014',
+        style: { fontFamily: 'Arial', fontWeight: 'bold',
+                 fontSize: Math.min(btnH * 0.42, 20),
+                 fill: canRoll ? '#ffffff' : (isDark ? '#556' : '#8a7a6a') },
+      });
+      rollLabel.anchor.set(0.5);
+      rollLabel.x = FPAD_X + boxW / 2;
+      rollLabel.y = rollY + btnH / 2;
+      rollLabel.alpha = canRoll ? 1 : 0.40;
+      container.addChild(rollLabel);
+
+      if (canRoll && hitRegions) hitRegions.rollArea.push({ x: FPAD_X, y: rollY, w: boxW, h: btnH });
     }
-
-    const rollLabel = new Text({
-      text: canRoll ? '\ud83c\udfb2  Roll Dice' : '\u2014 Moving \u2014',
-      style: { fontFamily: 'Arial', fontWeight: 'bold',
-               fontSize: Math.min(btnH * 0.42, 20),
-               fill: canRoll ? '#ffffff' : (isDark ? '#556' : '#8a7a6a') },
-    });
-    rollLabel.anchor.set(0.5);
-    rollLabel.x = FPAD_X + boxW / 2;
-    rollLabel.y = rollY + btnH / 2;
-    rollLabel.alpha = canRoll ? 1 : 0.40;
-    container.addChild(rollLabel);
-
-    if (canRoll && hitRegions) hitRegions.rollArea.push({ x: FPAD_X, y: rollY, w: boxW, h: btnH });
 
     // Undo button
     if (showUndo) {
@@ -271,7 +324,7 @@ export function drawFloatingDice(container, state, game, theme, isDark, opts = {
       undoLabel.alpha = canUndo ? 1 : 0.35;
       container.addChild(undoLabel);
 
-      if (hitRegions) hitRegions.undoArea.push({ x: FPAD_X, y: undoY, w: boxW, h: btnH });
+      if (canUndo && hitRegions) hitRegions.undoArea.push({ x: FPAD_X, y: undoY, w: boxW, h: btnH });
     }
   }
 }
@@ -557,8 +610,8 @@ export function drawTipZone(container, cx, cy, r, label, count, color) {
 
 // ─── Checker-pip stack — replaces "BAR ×N" / "OFF ×N" text at arm tips ──────
 // Draws the label then N filled checker circles stacked below it, centered at (cx,cy).
-export function drawCheckerPips(container, cx, cy, label, count, color, fontSize) {
-  const CR   = 6;                  // checker radius
+export function drawCheckerPips(container, cx, cy, label, count, color, fontSize, checkerRadius = 6) {
+  const CR   = checkerRadius;      // checker radius
   const STEP = CR * 1.55;          // vertical distance between checker centres
   const COLS = count > 4 ? 2 : 1;  // 2-column layout for piles > 4
   const numRows = count > 0 ? Math.ceil(count / COLS) : 0;

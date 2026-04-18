@@ -330,12 +330,19 @@ export class UIManager {
     this.$animCanvas.style.width  = `${W}px`;
     this.$animCanvas.style.height = `${H}px`;
 
-    PixelArt.showEliminationAnimation(
-      this.$animCanvas, attackerColor, defenderColor, () => {
-        this.$animOv.classList.add('hidden');
-        done && done();
-      }
+    const finish = () => {
+      this.$animOv.removeEventListener('click', onSkip);
+      this.$animOv.classList.add('hidden');
+      done && done();
+    };
+
+    const cancel = PixelArt.showEliminationAnimation(
+      this.$animCanvas, attackerColor, defenderColor, finish
     );
+
+    // Tap/click anywhere on the overlay to skip immediately
+    const onSkip = () => { if (cancel) cancel(); };
+    this.$animOv.addEventListener('click', onSkip, { once: true });
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

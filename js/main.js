@@ -5,12 +5,13 @@ import { MODE_INFO }      from './constants.js';
 import { network }        from './p2p-engine.js';
 
 // ─── State ───────────────────────────────────────────────────────────────────
-let ui            = null;
-let game          = null;
-let renderer      = null;
-let canvas        = null;
-let autoFlip      = false;
-let hasRolledOnce = false;  // suppress the "click Roll" tutorial hint after first roll
+let ui              = null;
+let game            = null;
+let renderer        = null;
+let canvas          = null;
+let autoFlip        = false;
+let hasRolledOnce   = false;  // suppress the "click Roll" tutorial hint after first roll
+let _pendingConfirm = false;  // waiting for player to click "End Turn" before broadcasting
 
 // Named delay constant for the "no moves" forfeit message
 const FORFEIT_MESSAGE_DELAY_MS = 800;
@@ -98,6 +99,12 @@ function _initP2PUI() {
   network.onAssigned = (playerIndex, save) => {
     // Guest received their seat assignment + initial game state from the host.
     _hideGuestWaiting();
+    // Persist seat for reconnection (2-hour TTL)
+    try {
+      localStorage.setItem('gammon_seat', JSON.stringify({
+        roomId: network.roomId, playerIndex, timestamp: Date.now(),
+      }));
+    } catch {}
     if (save) {
       _startGameFromSave(save, playerIndex);
     }
@@ -106,6 +113,7 @@ function _initP2PUI() {
   network.onStateReceived = (save) => {
     // A state sync arrived (roll, move, etc.).
     if (!game) return;
+    _pendingConfirm = false;
     game.importSave(save);
     refreshUI();
     if (game.isGameOver()) showWinScreen();
@@ -113,6 +121,16 @@ function _initP2PUI() {
 
   // Let the engine request the current save for late-joining guests.
   network.getSave = () => (game ? game.exportSave() : null);
+
+  // Play elimination animation when received from the host.
+  network.onHitReceived = (attacker, defender) => {
+    if (!game) return;
+    ui.playEliminationAnimation(
+      game.players[attacker].color,
+      game.players[defender].color,
+      () => renderer && renderer.render()
+    );
+  };
 
   // If the URL has ?room=, we're a guest — connect immediately.
   network.init();
@@ -205,6 +223,9 @@ function _wireGame(players) {
       players[defender].color,
       () => renderer.render()
     );
+    if (network.isOnline && network.isHost) {
+      network.broadcastHit(attacker, defender);
+    }
   };
 }
 
@@ -278,6 +299,8 @@ function goToMenu() {
   if (network.isOnline) network.disconnect();
   game     = null;
   renderer = null;
+  const indicator = document.getElementById('player-indicator');
+  if (indicator) indicator.classList.add('hidden');
   ui.showSetup(!!localStorage.getItem(SAVE_KEY));
 }
 
@@ -303,12 +326,24 @@ function applyFlip() {
   renderer.flipped = autoFlip && (game.currentPlayer % 2 === 1);
 }
 
+// ─── Confirm turn (online: broadcast queued state after last move) ────────────
+function _confirmTurn() {
+  if (!_pendingConfirm) return;
+  _pendingConfirm = false;
+  _broadcastState();
+  refreshUI();
+  if (game && game.isGameOver()) showWinScreen();
+}
+
 // ─── Undo ─────────────────────────────────────────────────────────────────────
 function handleUndo() {
   if (!game) return;
-  if (network.isOnline) return;  // undo disabled in online games to prevent desync
-  game.undoMove();
+  const wasPending = _pendingConfirm;
+  _pendingConfirm = false;
+  if (!game.undoMove()) return;
   refreshUI();
+  if (!wasPending) _broadcastState();
+  // wasPending: undid the last move of the turn — no broadcast yet, turn continues
 }
 
 // ─── Roll dice ────────────────────────────────────────────────────────────────
@@ -347,9 +382,15 @@ function handleCanvasClick(e) {
   if (game.phase === 'gameover') return;
 
   // Online: lock the board when it is not this client's turn.
-  if (network.isOnline && game.currentPlayer !== network.localPlayerIndex) return;
+  // Exception: _pendingConfirm means the turn just ended locally and the player
+  // still needs to click "End Turn" (or undo) before state is broadcast.
+  if (network.isOnline && game.currentPlayer !== network.localPlayerIndex && !_pendingConfirm) return;
 
   const hit = renderer.hitTest(e.clientX, e.clientY);
+  if (hit?.type === 'confirm') {
+    _confirmTurn();
+    return;
+  }
   if (hit?.type === 'roll') {
     handleRoll();
     return;
@@ -382,11 +423,27 @@ function handleCanvasClick(e) {
       game.moveChecker(game.selectedPoint, dest);
       game.selectedPoint = null;
       game.validMoves    = [];
+
+      if (game.isGameOver()) {
+        renderer.render();
+        refreshUI();
+        _broadcastState();
+        showWinScreen();
+        return;
+      }
+
+      // Online: after the last move of a turn, wait for player to confirm
+      // before broadcasting — so they still have a chance to undo.
+      if (network.isOnline && game.phase === 'rolling') {
+        _pendingConfirm = true;
+        renderer.render();
+        refreshUI();
+        return;
+      }
+
       renderer.render();
       refreshUI();
       _broadcastState();
-
-      if (game.isGameOver()) showWinScreen();
       return;
     }
 
@@ -419,12 +476,40 @@ function handleCanvasClick(e) {
   refreshUI();
 }
 
+// ─── Player indicator ─────────────────────────────────────────────────────────
+function _updatePlayerIndicator() {
+  const el = document.getElementById('player-indicator');
+  if (!el) return;
+  if (!network.isOnline || !game) {
+    el.classList.add('hidden');
+    return;
+  }
+  const idx = network.localPlayerIndex;
+  const player = game.players[idx];
+  if (!player) { el.classList.add('hidden'); return; }
+  el.innerHTML = '';
+  const dot = document.createElement('span');
+  dot.style.cssText = `display:inline-block;width:10px;height:10px;border-radius:50%;background:${player.color};flex-shrink:0`;
+  const label = document.createElement('span');
+  label.textContent = `You: Player ${idx + 1}`;
+  el.appendChild(dot);
+  el.appendChild(label);
+  el.classList.remove('hidden');
+}
+
 // ─── Refresh all UI ───────────────────────────────────────────────────────────
 function refreshUI() {
   if (!game) return;
 
   const state = game.getState();
   applyFlip();
+
+  if (renderer) {
+    renderer.myTurn         = !network.isOnline || game.currentPlayer === network.localPlayerIndex;
+    renderer.isOnline       = network.isOnline;
+    renderer.pendingConfirm = _pendingConfirm;
+    renderer.pendingPlayer  = _pendingConfirm ? network.localPlayerIndex : null;
+  }
   renderer.render();
 
   ui.updateTurnIndicator(
@@ -434,12 +519,12 @@ function refreshUI() {
   );
 
   ui.setRollButtonState(state.phase === 'rolling', '🎲 Roll');
-  // Undo is disabled in online games to prevent desync.
-  ui.setUndoButtonState(!network.isOnline && game.canUndo());
+  ui.setUndoButtonState(game.canUndo());
 
   if (game.mode === 'unigammon') showTutorialHint();
 
   _updateGameStatus();
+  _updatePlayerIndicator();
 
   // Auto-save after every action; clear save once game is over.
   // Don't auto-save in online games (state is owned by the host).

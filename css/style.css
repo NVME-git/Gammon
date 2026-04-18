@@ -429,6 +429,25 @@ body {
   box-shadow: 0 5px 18px rgba(0,0,0,0.55);
 }
 
+/* ── Player indicator — shown during online games ───────────────────────────── */
+.player-indicator {
+  position: fixed;
+  top: 44px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0,0,0,0.55);
+  z-index: 120;
+  pointer-events: none;
+}
+.player-indicator.hidden { display: none; }
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    GAME SCREEN
    ═══════════════════════════════════════════════════════════════════════════════ */

@@ -41,6 +41,8 @@ export class NetworkManager {
     this.onWaiting           = null;
     /** Called by the host when a guest joins and needs state (getSave callback). */
     this.getSave             = null;
+    /** Called with (attacker, defender) when a checker-hit animation should play. */
+    this.onHitReceived       = null;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -110,6 +112,15 @@ export class NetworkManager {
   }
 
   /**
+   * Broadcast a checker-hit event (elimination animation) to all peers.
+   * @param {number} attacker
+   * @param {number} defender
+   */
+  broadcastHit(attacker, defender) {
+    this._broadcast({ type: 'hit', attacker, defender });
+  }
+
+  /**
    * Send full state + player assignment to a single guest connection.
    * Called by the host when starting a game or when a guest connects late.
    * @param {import('peerjs').DataConnection} conn
@@ -158,15 +169,26 @@ export class NetworkManager {
         // A guest is asking the host for the current state (e.g. refresh / late join).
         if (this.isHost && this.getSave) {
           const save = this.getSave();
-          // Use the stable index already assigned for this connection, falling
-          // back to a fresh index only if this connection hasn't been seen yet.
           let idx = this._assignedIndices.get(fromConn);
           if (idx === undefined) {
-            idx = this._nextPlayerIndex++;
+            // Honour a claimed seat if the index is valid and not already taken
+            const claimed = data.claimedIndex;
+            const takenIndices = new Set(this._assignedIndices.values());
+            if (claimed !== undefined && claimed > 0 && !takenIndices.has(claimed)) {
+              idx = claimed;
+              if (claimed >= this._nextPlayerIndex) this._nextPlayerIndex = claimed + 1;
+            } else {
+              idx = this._nextPlayerIndex++;
+            }
             this._assignedIndices.set(fromConn, idx);
           }
           if (save) this.assignGuest(fromConn, idx, save);
         }
+        break;
+      }
+      case 'hit': {
+        if (this.onHitReceived) this.onHitReceived(data.attacker, data.defender);
+        if (this.isHost) this._broadcast({ type: 'hit', attacker: data.attacker, defender: data.defender }, fromConn);
         break;
       }
       default:
@@ -228,8 +250,11 @@ export class NetworkManager {
 
       if (!this.isHost) {
         // Guest: ask for the current state immediately in case the game is
-        // already in progress.
-        this._send(conn, { type: 'request_state' });
+        // already in progress. Include saved seat if available.
+        const claimedIndex = _loadSavedSeat(this.roomId);
+        const msg = { type: 'request_state' };
+        if (claimedIndex !== null) msg.claimedIndex = claimedIndex;
+        this._send(conn, msg);
       } else {
         // Host: assign a stable player index to this connection.
         const playerIndex = this._nextPlayerIndex++;
@@ -288,3 +313,15 @@ export class NetworkManager {
 
 /** Singleton instance used across the app. */
 export const network = new NetworkManager();
+
+// ─── Saved-seat helper ────────────────────────────────────────────────────────
+function _loadSavedSeat(roomId) {
+  try {
+    const raw = localStorage.getItem('gammon_seat');
+    if (!raw) return null;
+    const { roomId: saved, playerIndex, timestamp } = JSON.parse(raw);
+    if (Date.now() - timestamp > 2 * 60 * 60 * 1000) return null;  // 2-hour TTL
+    if (saved !== roomId) return null;
+    return playerIndex;
+  } catch { return null; }
+}

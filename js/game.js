@@ -68,11 +68,11 @@ export class BackgammonGame {
     const mode = this.mode;
 
     if (mode === 'unigammon') {
-      // All 15 checkers at the left end; single player pushes them right
-      this._set(0, 0, 5);
-      this._set(0, 1, 5);
-      this._set(0, 2, 3);
-      this._set(0, 3, 2);
+      // Same distribution as bigammon P0: spread across the board
+      this._set(0, 23, 2);  // 2 at pos 24
+      this._set(0, 12, 5);  // 5 at pos 13
+      this._set(0,  7, 3);  // 3 at pos 8
+      this._set(0,  5, 5);  // 5 at pos 6
       return;
     }
 
@@ -112,16 +112,15 @@ export class BackgammonGame {
       return;
     }
 
-    // 4-player quadgammon: S-path through cross arms.
-    // Each player starts at the TIP of their arm (outermost = virtual 0)
-    // and their 24-point path alternates inward/outward through the 4 arms.
-    // Arms: arm0=down(0-5), arm1=left(6-11), arm2=up(12-17), arm3=right(18-23)
-    // P0=South(arm0), P1=West(arm1), P2=North(arm2), P3=East(arm3)
+    // 4-player quadgammon: bigammon-like spread across all 4 arms.
+    // Virtual positions v=5,7,12,22 map to 16 distinct physical points
+    // (no two players share a starting physical point) and distribute
+    // each player's pieces across all four arms like classic backgammon.
     for (let p = 0; p < N; p++) {
-      this._set(p, this.getActualPos(p, 0), 5);
-      this._set(p, this.getActualPos(p, 1), 5);
-      this._set(p, this.getActualPos(p, 2), 3);
-      this._set(p, this.getActualPos(p, 5), 2);
+      this._set(p, this.getActualPos(p,  5), 5);  // 5 at pos 6  (hub of own arm)
+      this._set(p, this.getActualPos(p,  7), 3);  // 3 at pos 8  (adjacent arm)
+      this._set(p, this.getActualPos(p, 12), 5);  // 5 at pos 13 (far arm tip)
+      this._set(p, this.getActualPos(p, 22), 2);  // 2 at pos 23 (bear-off arm, near tip)
     }
   }
 

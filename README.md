@@ -1,6 +1,6 @@
 # Gammon
 
-**The Ultimate Multi-Player Backgammon Experience** — 1-to-4 player backgammon in the browser, rendered with PixiJS (WebGL).
+**The Ultimate Multi-Player Backgammon Experience** — 1-to-4 player backgammon in the browser, rendered with PixiJS (WebGL). Supports local and online peer-to-peer multiplayer.
 
 ## Game Modes
 
@@ -48,10 +48,20 @@ npm run preview
 
 Open [http://localhost:8000](http://localhost:8000) in your browser.
 
+## Online Multiplayer (P2P)
+
+Gammon supports zero-backend browser-to-browser multiplayer via WebRTC (PeerJS):
+
+1. On the setup screen, scroll to **🌐 Play Online** and click **Create Online Room**.
+2. Share the generated link with your opponent(s).
+3. Configure players and click **New Game** — guests join automatically.
+4. Your player number and colour are shown in the top-right corner during online games.
+5. The **Roll** button and board are locked when it is not your turn.
+
 ## How to Play
 
 1. **Choose a game mode** from the setup screen.
-2. **Name your players** (or use the auto-generated funny names) and pick colors.
+2. **Name your players** (or use the auto-generated funny names) and pick colours.
 3. Click **New Game** to start.
 4. On your turn, click **Roll** to roll the dice, then click a checker to select it and click a valid destination point.
 5. Bear all your checkers off the board to win.
@@ -62,8 +72,8 @@ Open [http://localhost:8000](http://localhost:8000) in your browser.
 |---|---|
 | Click checker | Select it |
 | Click highlighted point | Move selected checker there |
-| **Roll** button | Roll dice at the start of your turn |
-| **↩** (Undo) | Undo the last move within a turn |
+| **Roll** button | Roll dice at the start of your turn (greyed out when not your turn in online games) |
+| **↩** (Undo) | Undo the last move within a turn (disabled in online games) |
 | **↻** (Flip) | Flip the board view (Bigammon only) |
 | **🌙 / ☀️** | Toggle dark / light theme |
 | **⚙️** | Open settings (elimination animations, sound) |
@@ -76,6 +86,7 @@ js/
 ├── main.js          — Orchestrator: wires UI events to game logic, drives the turn loop
 ├── game.js          — BackgammonGame class: all rules, move validation, bar/borne-off logic
 ├── pixi-renderer.js — BoardRenderer: PixiJS v8 WebGL renderer, hit-testing, theme switching
+├── p2p-engine.js    — NetworkManager: zero-backend P2P multiplayer via PeerJS/WebRTC
 ├── ui.js            — UIManager: DOM screens (setup / game / win), player forms
 ├── constants.js     — Game mode definitions, player colors, theme palettes
 ├── textures.js      — Procedural texture generation (wood grain, glossy checkers)
@@ -85,8 +96,8 @@ js/
 └── layouts/
     ├── linear.js    — Bigammon / Unigammon: 24-point horizontal strip with BAR / OFF zones
     ├── triangle.js  — Trigammon: Y-shaped board, 36 diamond points across 3 arms
-    ├── cross.js     — Quadgammon: cross-shaped board, 4 arms, central BAR hub
-    └── shared.js    — Shared helpers: dice HUD strip, arm highlights, chevrons
+    ├── cross.js     — Quadgammon: cross-shaped board, 4 arms, corner path arrows
+    └── shared.js    — Shared helpers: dice HUD strip, arm highlights, chevrons, pip stacks
 ```
 
 ## Tech Stack
@@ -97,6 +108,4 @@ js/
 
 ## Support
 
-If you enjoy Gammon, consider buying me a coffee!
-
-[![Buy Me a Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=☕&slug=nabeelvandayar&button_colour=FFDD00&font_colour=000000&font_family=Arial&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/nabeelvandayar)
+If you enjoy Gammon, consider [buying me a coffee](https://buymeacoffee.com/nabeelvandayar)!

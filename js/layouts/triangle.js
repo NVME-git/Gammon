@@ -12,7 +12,7 @@ import { drawFloatingDice, drawArmChevron, drawCheckerPips } from './shared.js';
  * BAR / OFF zones live in the right side panel (always visible).
  * Dice live in the left side panel (large).
  */
-export function buildTriangleBoard(app, container, game, state, theme, hitRegions, showNumbers = true) {
+export function buildTriangleBoard(app, container, game, state, theme, hitRegions, showNumbers = true, myTurn = true, isOnline = false, pendingConfirm = false, pendingPlayer = null) {
   const W = app.screen.width;
   const H = app.screen.height;
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -260,16 +260,16 @@ export function buildTriangleBoard(app, container, game, state, theme, hitRegion
 
     const barCx = tipX - nx * badgeLat;
     const barCy = tipY - ny * badgeLat;
-    drawCheckerPips(container, barCx, barCy, 'BAR', state.bar[inP], game.players[inP].color, labelFontSize);
+    drawCheckerPips(container, barCx, barCy, 'BAR', state.bar[inP], game.players[inP].color, labelFontSize, CR);
     hitRegions.barAreas.push({ x: barCx - hitRadius, y: barCy - hitRadius, w: hitRadius * 2, h: hitRadius * 2 });
 
     const offCx = tipX + nx * badgeLat;
     const offCy = tipY + ny * badgeLat;
-    drawCheckerPips(container, offCx, offCy, 'OFF', state.borneOff[outP], game.players[outP].color, labelFontSize);
+    drawCheckerPips(container, offCx, offCy, 'OFF', state.borneOff[outP], game.players[outP].color, labelFontSize, CR);
     hitRegions.bearAreas.push({ x: offCx - hitRadius, y: offCy - hitRadius, w: hitRadius * 2, h: hitRadius * 2 });
   }
 
   // ── Floating dice + Roll + Undo buttons (top-left corner) ───────────────
   drawFloatingDice(container, state, game, theme, isDark,
-    { showButtons: true, showUndo: true, hitRegions });
+    { showButtons: true, showUndo: true, hitRegions, myTurn, isOnline, pendingConfirm, pendingPlayer });
 }

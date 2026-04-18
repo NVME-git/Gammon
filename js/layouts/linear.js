@@ -8,7 +8,7 @@ import { drawFloatingDice, drawCheckerPips } from './shared.js';
  * 24 diamond points in a horizontal strip with BAR/OFF zones
  * in the top and bottom strips.
  */
-export function buildLinearBoard(app, container, game, state, theme, flipped, hitRegions, showNumbers = true) {
+export function buildLinearBoard(app, container, game, state, theme, flipped, hitRegions, showNumbers = true, myTurn = true, isOnline = false, pendingConfirm = false, pendingPlayer = null) {
   const W = app.screen.width;
   const H = app.screen.height;
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -80,7 +80,8 @@ export function buildLinearBoard(app, container, game, state, theme, flipped, hi
   container.addChild(hlGfx);
 
   // ── 24 diamond points ──────────────────────────────────────────────────
-  const dColors = [theme.triangle1, theme.triangle2];
+  const dColor0 = game.players[bottomPlayer]?.color || theme.triangle1;
+  const dColor1 = is2P ? (game.players[topPlayer]?.color || theme.triangle2) : theme.triangle2;
   const diamonds = new Graphics();
 
   for (let i = 0; i < 24; i++) {
@@ -88,7 +89,7 @@ export function buildLinearBoard(app, container, game, state, theme, flipped, hi
     const pcx = px + PW / 2;
 
     diamonds.poly([pcx, CY - TH, px + PW, CY, pcx, CY + TH, px, CY]);
-    diamonds.fill(dColors[i % 2]);
+    diamonds.fill(i % 2 === 0 ? dColor0 : dColor1);
 
     // Diamond polygon hit area (exact diamond shape, not full column)
     hitRegions.pointPolygons.push({
@@ -187,7 +188,7 @@ export function buildLinearBoard(app, container, game, state, theme, flipped, hi
     zoneBg.stroke({ color: pColor, width: 1.5, alpha: 0.45 });
     container.addChild(zoneBg);
 
-    drawCheckerPips(container, zCx, zCy, label, count, pColor, numFontH);
+    drawCheckerPips(container, zCx, zCy, label, count, pColor, numFontH, CR);
 
     if (zone.type === 'bar') {
       hitRegions.barAreas.push({ x: zone.x, y: zone.y, w: zone.w, h: zone.h });
@@ -198,7 +199,7 @@ export function buildLinearBoard(app, container, game, state, theme, flipped, hi
 
   // ── Floating dice + Roll + Undo (smaller dice to fit beside board) ───
   drawFloatingDice(container, state, game, theme, isDark,
-    { showButtons: true, showUndo: true, hitRegions, dieSize: FLOAT_DIE });
+    { showButtons: true, showUndo: true, hitRegions, dieSize: FLOAT_DIE, myTurn, isOnline, pendingConfirm, pendingPlayer });
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

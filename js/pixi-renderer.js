@@ -21,9 +21,13 @@ import { buildCrossBoard } from './layouts/cross.js';
  */
 export class BoardRenderer {
   constructor(canvas, game) {
-    this.canvas = canvas;
-    this.game   = game;
-    this.flipped = false;
+    this.canvas   = canvas;
+    this.game     = game;
+    this.flipped  = false;
+    this.myTurn         = true;
+    this.isOnline       = false;
+    this.pendingConfirm = false;
+    this.pendingPlayer  = null;   // local player shown during pendingConfirm
 
     // Hit-test regions (populated during render)
     this._pointAreas    = [];
@@ -31,6 +35,7 @@ export class BoardRenderer {
     this._bearAreas     = [];
     this._rollArea      = [];
     this._undoArea      = [];
+    this._confirmArea   = [];
     this._pointCenters  = [];
     this._pointPolygons = [];  // [{poly:[x0,y0,x1,y1,...], idx}]
 
@@ -117,6 +122,7 @@ export class BoardRenderer {
     this._bearAreas     = [];
     this._rollArea      = [];
     this._undoArea      = [];
+    this._confirmArea   = [];
     this._pointCenters  = [];
     this._pointPolygons = [];
 
@@ -126,6 +132,7 @@ export class BoardRenderer {
       bearAreas:     this._bearAreas,
       rollArea:      this._rollArea,
       undoArea:      this._undoArea,
+      confirmArea:   this._confirmArea,
       pointCenters:  this._pointCenters,
       pointPolygons: this._pointPolygons,
     };
@@ -133,16 +140,20 @@ export class BoardRenderer {
     const state = this.game.getState();
 
     const sn = this.showNumbers;
+    const mt = this.myTurn;
+    const io = this.isOnline;
+    const pc = this.pendingConfirm;
+    const pp = this.pendingPlayer;
     switch (this.game.mode) {
       case 'unigammon':
       case 'bigammon':
-        buildLinearBoard(this._app, this._board, this.game, state, theme, this.flipped, hitRegions, sn);
+        buildLinearBoard(this._app, this._board, this.game, state, theme, this.flipped, hitRegions, sn, mt, io, pc, pp);
         break;
       case 'trigammon':
-        buildTriangleBoard(this._app, this._board, this.game, state, theme, hitRegions, sn);
+        buildTriangleBoard(this._app, this._board, this.game, state, theme, hitRegions, sn, mt, io, pc, pp);
         break;
       case 'quadgammon':
-        buildCrossBoard(this._app, this._board, this.game, state, theme, hitRegions, sn);
+        buildCrossBoard(this._app, this._board, this.game, state, theme, hitRegions, false, mt, io, pc, pp);
         break;
     }
 
@@ -231,6 +242,10 @@ export class BoardRenderer {
     const x = (clientX - rect.left) * (this._app.screen.width  / rect.width);
     const y = (clientY - rect.top)  * (this._app.screen.height / rect.height);
 
+    for (const a of this._confirmArea) {
+      if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h)
+        return { type: 'confirm' };
+    }
     for (const a of this._rollArea) {
       if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h)
         return { type: 'roll' };
