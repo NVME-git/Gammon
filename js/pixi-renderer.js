@@ -6,6 +6,7 @@ import { TweenManager } from './animation.js';
 import { buildLinearBoard } from './layouts/linear.js';
 import { buildTriangleBoard } from './layouts/triangle.js';
 import { buildCrossBoard } from './layouts/cross.js';
+import { buildDiamondBoard } from './layouts/diamond.js';
 
 /**
  * PixiJS-based BoardRenderer.
@@ -36,8 +37,12 @@ export class BoardRenderer {
     this._rollArea      = [];
     this._undoArea      = [];
     this._confirmArea   = [];
+    this._resignArea    = [];
     this._pointCenters  = [];
     this._pointPolygons = [];  // [{poly:[x0,y0,x1,y1,...], idx}]
+
+    // Resign timer seconds remaining (set by main.js, drawn in HUD)
+    this.resignSecondsLeft = null;
 
     // Avatar cache
     this._avatarCache = {};
@@ -123,6 +128,7 @@ export class BoardRenderer {
     this._rollArea      = [];
     this._undoArea      = [];
     this._confirmArea   = [];
+    this._resignArea    = [];
     this._pointCenters  = [];
     this._pointPolygons = [];
 
@@ -133,6 +139,7 @@ export class BoardRenderer {
       rollArea:      this._rollArea,
       undoArea:      this._undoArea,
       confirmArea:   this._confirmArea,
+      resignArea:    this._resignArea,
       pointCenters:  this._pointCenters,
       pointPolygons: this._pointPolygons,
     };
@@ -152,8 +159,11 @@ export class BoardRenderer {
       case 'trigammon':
         buildTriangleBoard(this._app, this._board, this.game, state, theme, hitRegions, sn, mt, io, pc, pp);
         break;
-      case 'quadgammon':
+      case 'battlegammon':
         buildCrossBoard(this._app, this._board, this.game, state, theme, hitRegions, false, mt, io, pc, pp);
+        break;
+      case 'quadgammon':
+        buildDiamondBoard(this._app, this._board, this.game, state, theme, hitRegions, mt, io, pc, pp, this.resignSecondsLeft);
         break;
     }
 
@@ -178,42 +188,54 @@ export class BoardRenderer {
     const toHL = [];
     if (state.selectedPoint !== null && state.selectedPoint !== 'bar') {
       const pp = this._pointPolygons.find(p => p.idx === state.selectedPoint);
-      if (pp) toHL.push({ poly: pp.poly, isSelected: true });
+      if (pp) toHL.push({ ...pp, isSelected: true });
     }
     for (const vm of state.validMoves) {
       if (vm !== 'bearoff') {
         const pp = this._pointPolygons.find(p => p.idx === vm);
-        if (pp) toHL.push({ poly: pp.poly, isSelected: false });
+        if (pp) toHL.push({ ...pp, isSelected: false });
       }
     }
 
-    for (const { poly, isSelected } of toHL) {
-      // Polygon centre for chevron placement
-      let cx = 0, cy = 0;
-      const n = poly.length / 2;
-      for (let i = 0; i < poly.length; i += 2) { cx += poly[i]; cy += poly[i + 1]; }
-      cx /= n; cy /= n;
+    for (const { poly, circle, isSelected, chevY } of toHL) {
+      // Centre for chevron placement
+      let cx, cy;
+      if (circle) {
+        cx = circle.cx; cy = circle.cy;
+      } else {
+        cx = 0; cy = 0;
+        const n = poly.length / 2;
+        for (let i = 0; i < poly.length; i += 2) { cx += poly[i]; cy += poly[i + 1]; }
+        cx /= n; cy /= n;
+      }
 
-      // Closed-path outline — full diamond edge
+      // Outline — circle or closed polygon
       const gfx = new Graphics();
-      gfx.moveTo(poly[0], poly[1]);
-      for (let i = 2; i < poly.length; i += 2) gfx.lineTo(poly[i], poly[i + 1]);
-      gfx.closePath();
-      gfx.stroke({ width: 5, color: outlineCol, alpha: 1, join: 'round', cap: 'round' });
+      if (circle) {
+        gfx.circle(circle.cx, circle.cy, circle.r);
+        gfx.stroke({ width: 5, color: outlineCol, alpha: 1 });
+      } else {
+        gfx.moveTo(poly[0], poly[1]);
+        for (let i = 2; i < poly.length; i += 2) gfx.lineTo(poly[i], poly[i + 1]);
+        gfx.closePath();
+        gfx.stroke({ width: 5, color: outlineCol, alpha: 1, join: 'round', cap: 'round' });
+      }
       this._pulseLayer.addChild(gfx);
       this._pulseGfxList.push(gfx);
 
       // Bobbing ▼ chevron only on valid-move targets
       if (!isSelected) {
+        const baseY  = chevY !== undefined ? chevY : cy - 10;
+        const anchorY = chevY !== undefined ? 0.5 : 1;
         const chev = new Text({
           text: '▼',
           style: { fontSize: 13, fill: outlineCol, fontWeight: 'bold' },
         });
-        chev.anchor.set(0.5, 1);
+        chev.anchor.set(0.5, anchorY);
         chev.x = cx;
-        chev.y = cy - 10;
+        chev.y = baseY;
         this._pulseLayer.addChild(chev);
-        this._pulseChevs.push({ gfx: chev, baseY: cy - 10, offset: Math.random() * Math.PI * 2 });
+        this._pulseChevs.push({ gfx: chev, baseY, offset: Math.random() * Math.PI * 2 });
       }
     }
   }
@@ -246,6 +268,10 @@ export class BoardRenderer {
       if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h)
         return { type: 'confirm' };
     }
+    for (const a of this._resignArea) {
+      if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h)
+        return { type: 'resign' };
+    }
     for (const a of this._rollArea) {
       if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h)
         return { type: 'roll' };
@@ -265,7 +291,7 @@ export class BoardRenderer {
         return { type: 'bearoff' };
     }
     for (const pp of this._pointPolygons) {
-      if (_pointInPoly(x, y, pp.poly))
+      if (pp.poly && _pointInPoly(x, y, pp.poly))
         return { type: 'point', idx: pp.idx };
     }
     for (const a of this._pointAreas) {

@@ -126,7 +126,7 @@ function _drawRollBtn(container, state, bx, by, bw, bh, radius, isDark, canRoll,
 // opts.dieSize      — die cell size in px (default 92; pass 72 for linear boards)
 // Returns the pixel width of the cluster box (useful for callers that need to offset the board)
 export function drawFloatingDice(container, state, game, theme, isDark, opts = {}) {
-  const { showButtons = false, showUndo = false, hitRegions = null, dieSize = 92, myTurn = true, isOnline = false, pendingConfirm = false, pendingPlayer = null } = opts;
+  const { showButtons = false, showUndo = false, hitRegions = null, dieSize = 92, myTurn = true, isOnline = false, pendingConfirm = false, pendingPlayer = null, showResign = false, resignSecondsLeft = null, resignTimeoutSec = 0 } = opts;
   const FPAD_X = 14;   // distance from left canvas edge
   const FPAD_Y = 62;   // distance from top — clears the floating ← Menu / ↻ buttons (38px + 10px gap)
   const PAD    =  8;   // internal padding
@@ -295,7 +295,7 @@ export function drawFloatingDice(container, state, game, theme, isDark, opts = {
       if (canRoll && hitRegions) hitRegions.rollArea.push({ x: FPAD_X, y: rollY, w: boxW, h: btnH });
     }
 
-    // Undo button
+    // Undo button — placed first so resign can stack below it
     if (showUndo) {
       const undoY = rollY + btnH + gap;
 
@@ -326,6 +326,58 @@ export function drawFloatingDice(container, state, game, theme, isDark, opts = {
 
       if (canUndo && hitRegions) hitRegions.undoArea.push({ x: FPAD_X, y: undoY, w: boxW, h: btnH });
     }
+
+    // Resign button (diamond mode) — below undo if both visible
+    if (showResign && myTurn && !pendingConfirm) {
+      const undoOffset = showUndo ? btnH + gap : 0;
+      const resignY = rollY + btnH + gap + undoOffset;
+      const resignGfx = new Graphics();
+      resignGfx.roundRect(FPAD_X, resignY, boxW, btnH, btnR);
+      resignGfx.fill({ color: isDark ? 0x3a1a1a : 0xd4a0a0, alpha: 1 });
+      container.addChild(resignGfx);
+
+      const resignLabel = new Text({
+        text: '🏳 Resign',
+        style: { fontFamily: 'Arial', fontWeight: 'bold', fontSize: Math.min(btnH * 0.40, 17), fill: '#cc4444' },
+      });
+      resignLabel.anchor.set(0.5);
+      resignLabel.x = FPAD_X + boxW / 2;
+      resignLabel.y = resignY + btnH / 2;
+      container.addChild(resignLabel);
+
+      if (hitRegions?.resignArea) hitRegions.resignArea.push({ x: FPAD_X, y: resignY, w: boxW, h: btnH });
+
+      // Countdown bar below resign button
+      if (resignSecondsLeft !== null && resignTimeoutSec > 0) {
+        const barY   = resignY + btnH + 4;
+        const barH   = 6;
+        const frac   = Math.max(0, resignSecondsLeft / resignTimeoutSec);
+        const urgent = resignSecondsLeft <= 10;
+        const barCol = urgent ? '#e74c3c' : '#3498db';
+
+        const barBg = new Graphics();
+        barBg.roundRect(FPAD_X, barY, boxW, barH, 3);
+        barBg.fill({ color: isDark ? 0x2a2a4a : 0xcccccc, alpha: 0.6 });
+        container.addChild(barBg);
+
+        if (frac > 0) {
+          const barFg = new Graphics();
+          barFg.roundRect(FPAD_X, barY, boxW * frac, barH, 3);
+          barFg.fill(barCol);
+          container.addChild(barFg);
+        }
+
+        const countLabel = new Text({
+          text: `⏱ ${resignSecondsLeft}s`,
+          style: { fontFamily: 'Arial', fontWeight: 'bold', fontSize: 11, fill: urgent ? '#e74c3c' : (isDark ? '#aabbcc' : '#445566') },
+        });
+        countLabel.anchor.set(0.5, 0);
+        countLabel.x = FPAD_X + boxW / 2;
+        countLabel.y = barY + barH + 2;
+        container.addChild(countLabel);
+      }
+    }
+
   }
 }
 

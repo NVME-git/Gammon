@@ -32,7 +32,7 @@ export class BackgammonGame {
     this.players     = players;
     this.settings    = settings;
     this.numPlayers  = players.length;
-    this.numPoints   = (mode === 'trigammon') ? 36 : 24;
+    this.numPoints   = (mode === 'trigammon') ? 36 : (mode === 'quadgammon') ? 48 : 24;
 
     this.points   = Array.from({ length: this.numPoints }, () => ({ count: 0, player: -1 }));
     this.bar      = new Array(this.numPlayers).fill(0);
@@ -49,6 +49,10 @@ export class BackgammonGame {
     this.moveLog  = [];
     this.turnCount = 0;
     this.winner   = -1;
+
+    // Diamond (quadgammon) only — resign + finish tracking
+    this.resigned    = new Array(this.numPlayers).fill(false);
+    this.finishOrder = [];
 
     // callbacks set by main.js
     this.onCheckerHit = null;
@@ -112,7 +116,19 @@ export class BackgammonGame {
       return;
     }
 
-    // 4-player quadgammon: bigammon-like spread across all 4 arms.
+    if (mode === 'quadgammon') {
+      // 4-player diamond: 2 back pieces at own starting tile, spread toward home.
+      // v=0,11,16,19 maps to 16 unique tiles (no collisions across all 4 players).
+      for (let p = 0; p < N; p++) {
+        this._set(p, this.getActualPos(p,  0), 2);  // 2 at own start
+        this._set(p, this.getActualPos(p, 11), 5);  // 5
+        this._set(p, this.getActualPos(p, 16), 3);  // 3
+        this._set(p, this.getActualPos(p, 19), 5);  // 5 in home stretch
+      }
+      return;
+    }
+
+    // 4-player battlegammon: bigammon-like spread across all 4 arms.
     // Virtual positions v=5,7,12,22 map to 16 distinct physical points
     // (no two players share a starting physical point) and distribute
     // each player's pieces across all four arms like classic backgammon.
@@ -140,7 +156,7 @@ export class BackgammonGame {
     }
     if (this.numPlayers <= 2 && player === 0) return virtual;
     if (this.numPlayers === 2 && player === 1) return 23 - virtual;
-    if (this.mode === 'quadgammon') {
+    if (this.mode === 'battlegammon') {
       // S-path: each player travels arm1(tip→hub) → arm2(hub→tip) → arm3(tip→hub) → arm4(hub→tip)
       // Arms: arm0=down(0-5), arm1=left(6-11), arm2=up(12-17), arm3=right(18-23)
       // P0=South, P1=West, P2=North, P3=East
@@ -168,6 +184,32 @@ export class BackgammonGame {
           return v - 12;
       }
     }
+    if (this.mode === 'quadgammon') {
+      // Diamond board: 48 tiles in 8 sections of 6.
+      // Each player traverses 24 tiles across the diamond from their entry arm to their exit arm.
+      // Sections: 0-5 left arm, 6-11 LL-diag, 12-17 LR-diag, 18-23 right arm,
+      //           24-29 UR-diag, 30-35 UL-diag, 36-41 top arm, 42-47 bottom arm
+      const v = virtual;
+      switch (player) {
+        case 0: // bottom: left arm → LL-diag → LR-diag → right arm
+          return v;                                 // actual = virtual (0→23)
+        case 1: // top: right arm(rev) → UR-diag → UL-diag → left arm(rev)
+          if (v <= 5)  return 23 - v;              // right arm reversed (23→18)
+          if (v <= 11) return 18 + v;              // UR-diag (24→29)
+          if (v <= 17) return v + 18;              // UL-diag (30→35)
+          return 23 - v;                           // left arm reversed (5→0)
+        case 2: // right: top arm(rev) → UR-diag(rev) → LR-diag(rev) → bottom arm
+          if (v <= 5)  return 41 - v;              // top arm reversed (41→36)
+          if (v <= 11) return 35 - v;              // UR-diag reversed (29→24)
+          if (v <= 17) return 29 - v;              // LR-diag reversed (17→12)
+          return 24 + v;                           // bottom arm (42→47)
+        case 3: // left: bottom arm(rev) → LL-diag(rev) → UL-diag(rev) → top arm
+          if (v <= 5)  return 47 - v;              // bottom arm reversed (47→42)
+          if (v <= 11) return 17 - v;              // LL-diag reversed (11→6)
+          if (v <= 17) return 47 - v;              // UL-diag reversed (35→30)
+          return v + 18;                           // top arm (36→41)
+      }
+    }
     const offset = player * Math.floor(NUM_POINTS / this.numPlayers);
     return (virtual + offset) % 24;
   }
@@ -180,29 +222,54 @@ export class BackgammonGame {
     }
     if (this.numPlayers <= 2 && player === 0) return actual;
     if (this.numPlayers === 2 && player === 1) return 23 - actual;
-    if (this.mode === 'quadgammon') {
-      // Inverse of getActualPos for quadgammon
+    if (this.mode === 'battlegammon') {
+      // Inverse of getActualPos for battlegammon
       switch (player) {
         case 0:
-          if (actual <= 5)  return 5 - actual;        // arm0 section1 (inward)
-          if (actual <= 11) return actual;             // arm1 section2 (outward)
-          if (actual <= 17) return actual + 6;         // arm2 section4 (outward)
-          return 35 - actual;                          // arm3 section3 (inward)
+          if (actual <= 5)  return 5 - actual;
+          if (actual <= 11) return actual;
+          if (actual <= 17) return actual + 6;
+          return 35 - actual;
         case 1:
-          if (actual <= 5)  return 17 - actual;        // arm0 section3 (inward)
-          if (actual <= 11) return 11 - actual;        // arm1 section1 (inward)
-          if (actual <= 17) return actual - 6;         // arm2 section2 (outward)
-          return actual;                               // arm3 section4 (outward)
+          if (actual <= 5)  return 17 - actual;
+          if (actual <= 11) return 11 - actual;
+          if (actual <= 17) return actual - 6;
+          return actual;
         case 2:
-          if (actual <= 5)  return actual + 18;        // arm0 section4 (outward)
-          if (actual <= 11) return 23 - actual;        // arm1 section3 (inward)
-          if (actual <= 17) return 17 - actual;        // arm2 section1 (inward)
-          return actual - 12;                          // arm3 section2 (outward)
+          if (actual <= 5)  return actual + 18;
+          if (actual <= 11) return 23 - actual;
+          if (actual <= 17) return 17 - actual;
+          return actual - 12;
         case 3:
-          if (actual <= 5)  return actual + 6;         // arm0 section2 (outward)
-          if (actual <= 11) return actual + 12;        // arm1 section4 (outward)
-          if (actual <= 17) return 29 - actual;        // arm2 section3 (inward)
-          return 23 - actual;                          // arm3 section1 (inward)
+          if (actual <= 5)  return actual + 6;
+          if (actual <= 11) return actual + 12;
+          if (actual <= 17) return 29 - actual;
+          return 23 - actual;
+      }
+    }
+    if (this.mode === 'quadgammon') {
+      // Inverse of getActualPos for diamond quadgammon
+      switch (player) {
+        case 0:
+          return actual;                               // identity
+        case 1:
+          if (actual >= 18 && actual <= 23) return 23 - actual;   // v: 0-5
+          if (actual >= 24 && actual <= 29) return actual - 18;   // v: 6-11
+          if (actual >= 30 && actual <= 35) return actual - 18;   // v: 12-17
+          if (actual >= 0  && actual <= 5)  return 23 - actual;   // v: 18-23
+          break;
+        case 2:
+          if (actual >= 36 && actual <= 41) return 41 - actual;   // v: 0-5
+          if (actual >= 24 && actual <= 29) return 35 - actual;   // v: 6-11
+          if (actual >= 12 && actual <= 17) return 29 - actual;   // v: 12-17
+          if (actual >= 42 && actual <= 47) return actual - 24;   // v: 18-23
+          break;
+        case 3:
+          if (actual >= 42 && actual <= 47) return 47 - actual;   // v: 0-5
+          if (actual >= 6  && actual <= 11) return 17 - actual;   // v: 6-11
+          if (actual >= 30 && actual <= 35) return 47 - actual;   // v: 12-17
+          if (actual >= 36 && actual <= 41) return actual - 18;   // v: 18-23
+          break;
       }
     }
     const offset = player * Math.floor(NUM_POINTS / this.numPlayers);
@@ -361,10 +428,22 @@ export class BackgammonGame {
 
     // Win condition
     if (this.borneOff[p] >= TOTAL_CHECKERS) {
-      this.phase  = 'gameover';
-      this.winner = p;
-      this._log(`🏆 ${this.players[p].name} wins!`);
-      return;
+      if (this.mode === 'quadgammon') {
+        // Diamond: record finish order, continue until ≤1 active player remains
+        if (!this.finishOrder.includes(p)) this.finishOrder.push(p);
+        if (this.winner === -1) this.winner = p;
+        this._log(`🏆 ${this.players[p].name} finished!`);
+        if (this._activePlayerCount() <= 1) {
+          this._finaliseFinishOrder();
+          this.phase = 'gameover';
+          return;
+        }
+      } else {
+        this.phase  = 'gameover';
+        this.winner = p;
+        this._log(`🏆 ${this.players[p].name} wins!`);
+        return;
+      }
     }
 
     // Advance turn if no moves remain or no further moves possible
@@ -456,11 +535,14 @@ export class BackgammonGame {
     this.validMoves    = [];
     this.turnCount++;
 
-    // Find the next active player (skip anyone who has already won)
+    // Find the next active player (skip finished/resigned in diamond; skip finished in other modes)
     let next     = (this.currentPlayer + 1) % this.numPlayers;
     let attempts = 0;
     while (attempts < this.numPlayers) {
-      if (this.borneOff[next] < TOTAL_CHECKERS) break;
+      const inactive = this.mode === 'quadgammon'
+        ? (this.resigned[next] || this.borneOff[next] >= TOTAL_CHECKERS)
+        : (this.borneOff[next] >= TOTAL_CHECKERS);
+      if (!inactive) break;
       next = (next + 1) % this.numPlayers;
       attempts++;
     }
@@ -476,6 +558,52 @@ export class BackgammonGame {
 
   isGameOver() {
     return this.phase === 'gameover';
+  }
+
+  // ── Diamond resign helpers ─────────────────────────────────────────────────
+
+  isActivePlayer(p) {
+    return !this.resigned[p] && this.borneOff[p] < TOTAL_CHECKERS;
+  }
+
+  _activePlayerCount() {
+    let n = 0;
+    for (let p = 0; p < this.numPlayers; p++) if (this.isActivePlayer(p)) n++;
+    return n;
+  }
+
+  _finaliseFinishOrder() {
+    // Add any remaining active players (the loser) and resigned players not yet in order
+    for (let p = 0; p < this.numPlayers; p++) {
+      if (!this.finishOrder.includes(p)) this.finishOrder.push(p);
+    }
+  }
+
+  /** Remove a player from the game (diamond mode only). Safe to call mid-turn. */
+  resignPlayer(p) {
+    if (this.mode !== 'quadgammon') return;
+    if (!this.isActivePlayer(p)) return;
+    this.resigned[p] = true;
+    // Remove all of this player's pieces from the board
+    for (let i = 0; i < this.numPoints; i++) {
+      if (this.points[i].player === p) this.points[i] = { count: 0, player: -1 };
+    }
+    this.bar[p] = 0;
+    this._log(`${this.players[p].name} resigned.`);
+
+    if (this._activePlayerCount() <= 1) {
+      this._finaliseFinishOrder();
+      this.phase = 'gameover';
+      if (this.winner === -1) {
+        // Find the one remaining active player (they lose, so winner = first to have finished, or null)
+        for (let i = 0; i < this.numPlayers; i++) {
+          if (this.isActivePlayer(i)) { this.winner = i; break; }
+        }
+      }
+      return;
+    }
+
+    if (this.currentPlayer === p) this.nextTurn();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -524,6 +652,8 @@ export class BackgammonGame {
       moveLog:       this.moveLog.map(e => ({ ...e })),
       turnCount:     this.turnCount,
       winner:        this.winner,
+      resigned:      [...this.resigned],
+      finishOrder:   [...this.finishOrder],
     });
     if (this._history.length > 20) this._history.shift();
   }
@@ -543,6 +673,8 @@ export class BackgammonGame {
     this.moveLog       = s.moveLog;
     this.turnCount     = s.turnCount;
     this.winner        = s.winner;
+    if (s.resigned)    this.resigned    = [...s.resigned];
+    if (s.finishOrder) this.finishOrder = [...s.finishOrder];
     return true;
   }
 
@@ -555,6 +687,7 @@ export class BackgammonGame {
     return {
       mode:          this.mode,
       players:       this.players,
+      settings:      this.settings,
       points:        this.points.map(p => ({ ...p })),
       bar:           [...this.bar],
       borneOff:      [...this.borneOff],
@@ -565,6 +698,8 @@ export class BackgammonGame {
       moveLog:       this.moveLog.slice(),
       turnCount:     this.turnCount,
       winner:        this.winner,
+      resigned:      [...this.resigned],
+      finishOrder:   [...this.finishOrder],
     };
   }
 
@@ -583,6 +718,8 @@ export class BackgammonGame {
     this.selectedPoint = null;
     this.validMoves    = [];
     this._history      = [];
+    if (save.resigned)    this.resigned    = [...save.resigned];
+    if (save.finishOrder) this.finishOrder = [...save.finishOrder];
   }
 
   /** Return a serialisable snapshot of the game state */
@@ -600,6 +737,8 @@ export class BackgammonGame {
       winner:        this.winner,
       moveLog:       this.moveLog.slice(0, 12),
       turnCount:     this.turnCount,
+      resigned:      [...this.resigned],
+      finishOrder:   [...this.finishOrder],
     };
   }
 }

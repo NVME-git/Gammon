@@ -9,7 +9,8 @@
 | **Unigammon** | 1 | Linear strip | Tutorial — bear all 15 pieces off the right end |
 | **Bigammon** | 2 | Linear strip | Classic backgammon on a 24-point linear board |
 | **Trigammon** | 3 | Y-shaped | Three-player battle on a triangular board, move clockwise |
-| **Quadgammon** | 4 | Cross / plus | Four-way mayhem on a cross-shaped board, last one standing wins |
+| **Quadgammon** | 4 | Diamond | Four-player race on a diamond board; each player enters at a corner and bears off at the opposite corner |
+| **Battlegammon** | 4 | Cross / plus | Four-way last-standing battle on a cross-shaped board; hit opponents to send them to the bar |
 
 ## Screenshots
 
@@ -25,8 +26,11 @@
 ### Trigammon — 3 Player Triangle
 ![Trigammon](docs/screenshots/trigammon.png)
 
-### Quadgammon — 4 Player Cross
+### Quadgammon — 4 Player Diamond Race
 ![Quadgammon](docs/screenshots/quadgammon.png)
+
+### Battlegammon — 4 Player Last Standing
+![Battlegammon](docs/screenshots/battlegammon.png)
 
 ## Running Locally
 
@@ -57,6 +61,37 @@ Gammon supports zero-backend browser-to-browser multiplayer via WebRTC (PeerJS):
 3. Configure players and click **New Game** — guests join automatically.
 4. Your player number and colour are shown in the top-right corner during online games.
 5. The **Roll** button and board are locked when it is not your turn.
+
+See [`p2p.html`](p2p.html) (served with the app) for a full interactive explainer including system diagram, turn flow, message protocol, and state machines.
+
+### How it works (summary)
+
+```
+Host browser                PeerJS cloud (STUN only)            Guest browser
+     |                              |                                  |
+     |── new Peer() ───────────────>|                                  |
+     |<─ peerId assigned ───────────|                                  |
+     |                              |<─── new Peer() ─────────────────|
+     |                              |<─── peer.connect(hostPeerId) ───|
+     |<════ WebRTC DataChannel (direct, no server) ══════════════════>|
+     |                              |                                  |
+     |<─ { type:'request_state' } ──────────────────────────────────|
+     |── { type:'assign', playerIndex:1, save:{…} } ───────────────>|
+```
+
+**Message types** (all JSON over reliable SCTP):
+
+| `type` | Direction | Purpose |
+|---|---|---|
+| `assign` | Host → Guest | Seat number + full game snapshot |
+| `state` | Any → All | Full game snapshot after a confirmed move |
+| `waiting` | Host → Guest | Game not yet started |
+| `request_state` | Guest → Host | Catch-up / reconnect request |
+| `hit` | Any → All | Trigger elimination animation on all peers |
+
+**Turn flow:** after a player uses their last die, `_pendingConfirm = true` and a green **✓ End Turn** button appears.  The state is only broadcast when the player clicks it — allowing undo before committing.  The host rebroadcasts every `state` it receives so all peers stay in sync.
+
+**Seat persistence:** the guest's `{ roomId, playerIndex }` is stored in `localStorage` (2-hour TTL).  On page reload the guest includes `claimedIndex` in `request_state` and the host restores the seat if it is free.
 
 ## How to Play
 
@@ -96,7 +131,8 @@ js/
 └── layouts/
     ├── linear.js    — Bigammon / Unigammon: 24-point horizontal strip with BAR / OFF zones
     ├── triangle.js  — Trigammon: Y-shaped board, 36 diamond points across 3 arms
-    ├── cross.js     — Quadgammon: cross-shaped board, 4 arms, corner path arrows
+    ├── cross.js     — Battlegammon: cross-shaped board, 4 arms, corner path arrows
+    ├── diamond.js   — Quadgammon: diamond board, 48 tiles, 4 player race with coloured shortcuts
     └── shared.js    — Shared helpers: dice HUD strip, arm highlights, chevrons, pip stacks
 ```
 

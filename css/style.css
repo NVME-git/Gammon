@@ -123,6 +123,16 @@ body {
   cursor: pointer;
 }
 .setting-row input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); }
+.setting-row select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
 
 .hidden { display: none !important; }
 

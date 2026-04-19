@@ -43,6 +43,14 @@
       <span>Board numbers</span>
       <input type="checkbox" id="numbers-toggle" checked>
     </label>
+    <label class="setting-row" id="resign-timeout-row">
+      <span>Resign timeout</span>
+      <select id="resign-timeout-select">
+        <option value="30">30 seconds</option>
+        <option value="60">1 minute</option>
+        <option value="0">Off</option>
+      </select>
+    </label>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════
@@ -81,8 +89,15 @@
           </div>
 
           <div class="mode-card" data-mode="quadgammon">
-            <div class="mode-icon">✚</div>
+            <div class="mode-icon">♦</div>
             <h3>Quadgammon</h3>
+            <p>4-player diamond race. Bear off all pieces first — last one standing loses!</p>
+            <span class="badge badge-4p">4 Players</span>
+          </div>
+
+          <div class="mode-card" data-mode="battlegammon">
+            <div class="mode-icon">✚</div>
+            <h3>Battlegammon</h3>
             <p>4-way mayhem on a cross-shaped board. Last one standing wins!</p>
             <span class="badge badge-4p">4 Players</span>
           </div>

@@ -12,17 +12,19 @@ export const PLAYER_COLORS = [
 ];
 
 export const GAME_MODES = {
-  UNIGAMMON: 'unigammon',
-  BIGAMMON:  'bigammon',
-  TRIGAMMON: 'trigammon',
-  QUADGAMMON:'quadgammon',
+  UNIGAMMON:   'unigammon',
+  BIGAMMON:    'bigammon',
+  TRIGAMMON:   'trigammon',
+  QUADGAMMON:  'quadgammon',
+  BATTLEGAMMON:'battlegammon',
 };
 
 export const MODE_INFO = {
-  unigammon:  { name: 'Unigammon',  players: 1, icon: '👤', description: '1 Player Tutorial' },
-  bigammon:   { name: 'Bigammon',   players: 2, icon: '⚔️',  description: '2 Player Classic'  },
-  trigammon:  { name: 'Trigammon',  players: 3, icon: '🔺', description: '3 Player Triangle' },
-  quadgammon: { name: 'Quadgammon', players: 4, icon: '✚',  description: '4 Player Cross'    },
+  unigammon:    { name: 'Unigammon',    players: 1, icon: '👤', description: '1 Player Tutorial'      },
+  bigammon:     { name: 'Bigammon',     players: 2, icon: '⚔️',  description: '2 Player Classic'       },
+  trigammon:    { name: 'Trigammon',    players: 3, icon: '🔺', description: '3 Player Triangle'      },
+  quadgammon:   { name: 'Quadgammon',   players: 4, icon: '♦',  description: '4 Player Diamond Race'  },
+  battlegammon: { name: 'Battlegammon', players: 4, icon: '✚',  description: '4 Player Last Standing' },
 };
 
 export const TOTAL_CHECKERS = 15;
@@ -62,4 +64,4 @@ export const THEME_COLORS = {
 };
 
 // Default player colors indexed by player slot
-export const DEFAULT_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f1c40f'];
+export const DEFAULT_COLORS = ['#e74c3c', '#2ecc71', '#f1c40f', '#3498db'];

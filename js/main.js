@@ -13,6 +13,11 @@ let autoFlip        = false;
 let hasRolledOnce   = false;  // suppress the "click Roll" tutorial hint after first roll
 let _pendingConfirm = false;  // waiting for player to click "End Turn" before broadcasting
 
+// Resign timer (diamond/quadgammon only)
+let _resignTimerStart    = 0;    // Date.now() when current turn started; 0 = not running
+let _resignTimeoutMs     = 30000;
+let _resignCheckInterval = null;
+
 // Named delay constant for the "no moves" forfeit message
 const FORFEIT_MESSAGE_DELAY_MS = 800;
 
@@ -40,6 +45,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Show continue button if a saved game exists
   ui.showSetup(!!localStorage.getItem(SAVE_KEY));
+
+  // 1-second tick to drive resign countdown
+  _resignCheckInterval = setInterval(_resignTick, 1000);
 });
 
 // ─── Game start ───────────────────────────────────────────────────────────────
@@ -188,9 +196,11 @@ function _startGameFromSave(save, playerIndex) {
   const players = save.players;
   const mode    = save.mode;
 
-  game = new BackgammonGame(mode, players, {});
+  _resignTimeoutMs = save.settings?.resignTimeoutMs ?? _resignTimeoutMs;
+  game = new BackgammonGame(mode, players, save.settings || {});
   game.importSave(save);
-  hasRolledOnce = true;  // suppress unigammon hint for guests
+  hasRolledOnce   = true;  // suppress unigammon hint for guests
+  _lastTurnPlayer = -1;
 
   ui.showGame();
   _applyUndoBtnVisibility(mode);
@@ -234,13 +244,74 @@ function _applyUndoBtnVisibility(_mode) {
   // The DOM undo-btn is hidden in HTML; nothing to do here.
 }
 
+// ─── Resign (diamond only) ────────────────────────────────────────────────────
+function _resignTick() {
+  if (!game || game.mode !== 'quadgammon' || game.phase === 'gameover') return;
+  if (_resignTimeoutMs <= 0 || _resignTimerStart === 0) {
+    if (renderer) { renderer.resignSecondsLeft = null; }
+    return;
+  }
+  const elapsed = Date.now() - _resignTimerStart;
+  const secsLeft = Math.max(0, Math.ceil((_resignTimeoutMs - elapsed) / 1000));
+  if (renderer) renderer.resignSecondsLeft = secsLeft;
+
+  if (elapsed >= _resignTimeoutMs) {
+    const cp = game.currentPlayer;
+    // Only the active player (or host on their behalf) fires the resign
+    if (!network.isOnline || cp === network.localPlayerIndex || network.isHost) {
+      handleResign(cp);
+    }
+    return;
+  }
+  if (renderer) renderer.render();
+}
+
+function _startResignTimer() {
+  _resignTimerStart = Date.now();
+}
+
+function _resetResignTimer() {
+  if (_resignTimerStart > 0) _resignTimerStart = Date.now();
+}
+
+function _stopResignTimer() {
+  _resignTimerStart = 0;
+  if (renderer) renderer.resignSecondsLeft = null;
+}
+
+function handleResign(playerIndex) {
+  if (!game || game.mode !== 'quadgammon') return;
+  if (!game.isActivePlayer(playerIndex)) return;
+
+  game.resignPlayer(playerIndex);
+  _stopResignTimer();
+
+  if (game.isGameOver()) {
+    renderer.render();
+    refreshUI();
+    _broadcastState();
+    showWinScreen();
+    return;
+  }
+
+  // If turn advanced to a new player, start a fresh timer
+  _startResignTimer();
+  renderer.render();
+  refreshUI();
+  _broadcastState();
+}
+
 function startGame() {
   const mode    = ui.selectedMode;
   const players = ui.getPlayerData();
 
-  game = new BackgammonGame(mode, players, {});
+  _resignTimeoutMs = (ui.resignTimeoutSec || 0) * 1000;
+
+  game = new BackgammonGame(mode, players, { resignTimeoutMs: _resignTimeoutMs });
   localStorage.removeItem(SAVE_KEY);
-  hasRolledOnce = false;
+  hasRolledOnce   = false;
+  _lastTurnPlayer = -1;
+  _stopResignTimer();
 
   // Show the game screen first so the canvas parent has valid dimensions
   // before PixiJS reads them during BoardRenderer initialisation.
@@ -273,7 +344,8 @@ function continueGame() {
   if (!raw) return;
   const save = JSON.parse(raw);
 
-  game = new BackgammonGame(save.mode, save.players, {});
+  _resignTimeoutMs = save.settings?.resignTimeoutMs ?? _resignTimeoutMs;
+  game = new BackgammonGame(save.mode, save.players, save.settings || {});
   game.importSave(save);
 
   // Show the game screen first so the canvas parent has valid dimensions
@@ -297,8 +369,10 @@ function playAgain() {
 
 function goToMenu() {
   if (network.isOnline) network.disconnect();
-  game     = null;
-  renderer = null;
+  game            = null;
+  renderer        = null;
+  _lastTurnPlayer = -1;
+  _stopResignTimer();
   const indicator = document.getElementById('player-indicator');
   if (indicator) indicator.classList.add('hidden');
   ui.showSetup(!!localStorage.getItem(SAVE_KEY));
@@ -355,6 +429,7 @@ function handleRoll() {
 
   const result = game.rollDice();
   if (!result) return;
+  _resetResignTimer();
 
   // Auto-highlight bar if player must enter from it
   if (!result.forfeit && game.phase === 'moving' && game.mustEnterFromBar()) {
@@ -399,6 +474,10 @@ function handleCanvasClick(e) {
     handleUndo();
     return;
   }
+  if (hit?.type === 'resign') {
+    handleResign(game.currentPlayer);
+    return;
+  }
 
   if (game.phase === 'rolling') return;  // roll button already handled above
 
@@ -423,6 +502,7 @@ function handleCanvasClick(e) {
       game.moveChecker(game.selectedPoint, dest);
       game.selectedPoint = null;
       game.validMoves    = [];
+      _resetResignTimer();
 
       if (game.isGameOver()) {
         renderer.render();
@@ -497,9 +577,23 @@ function _updatePlayerIndicator() {
   el.classList.remove('hidden');
 }
 
+// ─── Resign timer helpers ─────────────────────────────────────────────────────
+let _lastTurnPlayer = -1;
+
 // ─── Refresh all UI ───────────────────────────────────────────────────────────
 function refreshUI() {
   if (!game) return;
+
+  // Start resign timer when a new player's turn begins (rolling phase)
+  if (game.mode === 'quadgammon' && _resignTimeoutMs > 0) {
+    const cp = game.currentPlayer;
+    if (game.phase === 'rolling' && cp !== _lastTurnPlayer) {
+      _lastTurnPlayer = cp;
+      _startResignTimer();
+    } else if (game.phase === 'gameover') {
+      _stopResignTimer();
+    }
+  }
 
   const state = game.getState();
   applyFlip();
@@ -540,11 +634,16 @@ function refreshUI() {
 // ─── Win screen ───────────────────────────────────────────────────────────────
 function showWinScreen() {
   const state = game.getState();
+  _stopResignTimer();
+
+  // Diamond: winner = first to finish; show finish order in scores
+  const winnerIdx = state.winner >= 0 ? state.winner : 0;
   ui.showWin(
-    game.players[state.winner].name,
-    game.players[state.winner].color,
+    game.players[winnerIdx].name,
+    game.players[winnerIdx].color,
     state.borneOff,
-    game.players
+    game.players,
+    state.finishOrder
   );
 }
 

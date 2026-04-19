@@ -17,9 +17,10 @@ export class UIManager {
     this.$themeToggle  = document.getElementById('theme-toggle');
     this.$settingsBtn  = document.getElementById('settings-btn');
     this.$settingsPanel= document.getElementById('settings-panel');
-    this.$animToggle    = document.getElementById('anim-toggle');
-    this.$soundToggle   = document.getElementById('sound-toggle');
-    this.$numbersToggle = document.getElementById('numbers-toggle');
+    this.$animToggle          = document.getElementById('anim-toggle');
+    this.$soundToggle         = document.getElementById('sound-toggle');
+    this.$numbersToggle       = document.getElementById('numbers-toggle');
+    this.$resignTimeoutSelect = document.getElementById('resign-timeout-select');
 
     // Game screen controls
     this.$backBtn      = document.getElementById('back-btn');
@@ -69,13 +70,17 @@ export class UIManager {
     this.$win.classList.add('hidden');
   }
 
-  showWin(winnerName, winnerColor, scores, players) {
+  showWin(winnerName, winnerColor, scores, players, finishOrder = null) {
     this.$win.classList.remove('hidden');
     this.$winTitle.textContent    = `🏆 ${winnerName} Wins! 🏆`;
     this.$winSubtitle.textContent = 'Congratulations, champion!';
 
     this.$finalScores.replaceChildren();
-    players.forEach((pl, i) => {
+    // If finishOrder provided (diamond), show players ranked by finish position
+    const orderedIdxs = finishOrder?.length ? finishOrder : players.map((_, i) => i);
+
+    orderedIdxs.forEach((i, rank) => {
+      const pl  = players[i];
       const div = document.createElement('div');
       div.className = 'score-row';
 
@@ -88,8 +93,13 @@ export class UIManager {
       nameSpan.textContent = pl.name;          // textContent — safe
 
       const valSpan = document.createElement('span');
-      valSpan.className   = 'score-val';
-      valSpan.textContent = `${scores[i]} borne off`;
+      valSpan.className = 'score-val';
+      if (finishOrder?.length) {
+        const medals = ['🥇', '🥈', '🥉', '4th'];
+        valSpan.textContent = medals[rank] || `${rank + 1}th`;
+      } else {
+        valSpan.textContent = `${scores[i]} borne off`;
+      }
 
       div.appendChild(colorDot);
       div.appendChild(nameSpan);
@@ -362,6 +372,10 @@ export class UIManager {
 
     this.showNumbers = localStorage.getItem('gammon_numbers') !== 'off';
     if (this.$numbersToggle) this.$numbersToggle.checked = this.showNumbers;
+
+    const savedTimeout = localStorage.getItem('gammon_resign_timeout');
+    this.resignTimeoutSec = savedTimeout !== null ? parseInt(savedTimeout, 10) : 30;
+    if (this.$resignTimeoutSelect) this.$resignTimeoutSelect.value = String(this.resignTimeoutSec);
   }
 
   _toggleTheme() {
@@ -400,6 +414,11 @@ export class UIManager {
       this.showNumbers = e.target.checked;
       localStorage.setItem('gammon_numbers', e.target.checked ? 'on' : 'off');
       this.onNumbersChange?.();
+    });
+
+    this.$resignTimeoutSelect?.addEventListener('change', e => {
+      this.resignTimeoutSec = parseInt(e.target.value, 10);
+      localStorage.setItem('gammon_resign_timeout', e.target.value);
     });
 
     this.$modeCards.forEach(card => {
