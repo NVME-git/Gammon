@@ -843,6 +843,31 @@ body {
   white-space: nowrap;
 }
 
+.p2p-qr-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.p2p-qr-img {
+  width: 148px;
+  height: 148px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
+}
+
+.p2p-qr-label {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--subtext);
+}
+
 .p2p-status {
   font-size: 0.85rem;
   color: var(--subtext);
@@ -903,4 +928,3 @@ body {
   color: #e08020;
   border-color: #6b4010;
 }
-

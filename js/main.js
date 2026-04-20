@@ -3,6 +3,7 @@ import { BackgammonGame } from './game.js';
 import { BoardRenderer }  from './pixi-renderer.js';
 import { MODE_INFO }      from './constants.js';
 import { network }        from './p2p-engine.js';
+import QRCode             from 'qrcode';
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let ui              = null;
@@ -64,6 +65,8 @@ function _initP2PUI() {
   $p2p.roomArea     = document.getElementById('p2p-room-area');
   $p2p.linkInput    = document.getElementById('p2p-link-input');
   $p2p.copyBtn      = document.getElementById('p2p-copy-btn');
+  $p2p.qrWrap       = document.getElementById('p2p-qr-wrap');
+  $p2p.qrImg        = document.getElementById('p2p-qr-img');
   $p2p.peerCount    = document.getElementById('p2p-peer-count');
   $p2p.waitScreen   = document.getElementById('p2p-waiting-screen');
   $p2p.waitTitle    = document.getElementById('p2p-waiting-title');
@@ -79,6 +82,7 @@ function _initP2PUI() {
       $p2p.linkInput.value = shareLink;
       $p2p.hostArea.classList.add('hidden');
       $p2p.roomArea.classList.remove('hidden');
+      _renderShareQr(shareLink);
       _updatePeerCount(0);
     });
   });
@@ -155,6 +159,24 @@ function _updatePeerCount(count) {
     ? 'Waiting for players to join…'
     : `✅ ${count} ${word} connected`;
   $p2p.peerCount.classList.toggle('connected', count > 0);
+}
+
+async function _renderShareQr(shareLink) {
+  if (!$p2p.qrWrap || !$p2p.qrImg) return;
+  try {
+    const dataUrl = await QRCode.toDataURL(shareLink, {
+      margin: 1,
+      width: 220,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#1a1a1a', light: '#ffffff' },
+    });
+    $p2p.qrImg.src = dataUrl;
+    $p2p.qrWrap.classList.remove('hidden');
+  } catch (err) {
+    console.warn('[P2P] Failed to generate room QR code', err);
+    $p2p.qrImg.removeAttribute('src');
+    $p2p.qrWrap.classList.add('hidden');
+  }
 }
 
 function _showGuestWaiting(title, msg) {
