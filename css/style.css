@@ -858,7 +858,7 @@ body {
   width: 148px;
   height: 148px;
   border-radius: 8px;
-  background: #fff;
+  background: var(--panel);
   padding: 6px;
 }
 

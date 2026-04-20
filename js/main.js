@@ -173,7 +173,7 @@ async function _renderShareQr(shareLink) {
     $p2p.qrImg.src = dataUrl;
     $p2p.qrWrap.classList.remove('hidden');
   } catch (err) {
-    console.warn('[P2P] Failed to generate room QR code', err);
+    console.warn('[P2P] Failed to generate room QR code (invalid link or QR library init issue)', err);
     $p2p.qrImg.removeAttribute('src');
     $p2p.qrWrap.classList.add('hidden');
   }
