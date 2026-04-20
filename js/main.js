@@ -457,7 +457,7 @@ function _randomDieValue() {
   return Math.ceil(Math.random() * 6);
 }
 
-function _getPreviewDicePair() {
+function _generatePreviewDice() {
   return [_randomDieValue(), _randomDieValue()];
 }
 
@@ -472,7 +472,7 @@ async function _playPreRollDiceAnimation() {
     if (!renderer) return;
     const startedAt = Date.now();
     while (Date.now() - startedAt < DICE_PRE_ROLL_MS) {
-      renderer.previewDice = _getPreviewDicePair();
+      renderer.previewDice = _generatePreviewDice();
       renderer.render();
       await _sleep(DICE_PRE_ROLL_STEP_MS);
     }
