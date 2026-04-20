@@ -453,13 +453,13 @@ function handleUndo() {
 }
 
 // ─── Roll dice ────────────────────────────────────────────────────────────────
-function _randomDieFace() {
+function _randomDieValue() {
   return Math.ceil(Math.random() * 6);
 }
 
 function _getPreviewDicePair() {
-  const d1 = _randomDieFace();
-  let d2 = _randomDieFace();
+  const d1 = _randomDieValue();
+  let d2 = _randomDieValue();
   if (d2 === d1) d2 = (d2 % 6) + 1;
   return [d1, d2];
 }
@@ -469,11 +469,11 @@ function _sleep(ms) {
 }
 
 async function _playPreRollDiceAnimation() {
-  if (!renderer) return;
   _isRollAnimating = true;
 
-  const startedAt = Date.now();
   try {
+    if (!renderer) return;
+    const startedAt = Date.now();
     while (Date.now() - startedAt < DICE_PRE_ROLL_MS) {
       renderer.previewDice = _getPreviewDicePair();
       renderer.render();
