@@ -164,7 +164,14 @@ function _updatePeerCount(count) {
 async function _renderShareQr(shareLink) {
   if (!$p2p.qrWrap || !$p2p.qrImg) return;
   try {
-    const dataUrl = await QRCode.toDataURL(shareLink, {
+    const qrPayload = [
+      'Gammon room link:',
+      shareLink,
+      '',
+      'Share this link with a friend via WhatsApp or another app.',
+    ].join('\n');
+
+    const dataUrl = await QRCode.toDataURL(qrPayload, {
       margin: 1,
       width: 220,
       errorCorrectionLevel: 'M',
