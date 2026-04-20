@@ -24,6 +24,7 @@ const FORFEIT_MESSAGE_DELAY_MS = 800;
 const DICE_PRE_ROLL_MS         = 260;
 const DICE_PRE_ROLL_STEP_MS    = 55;
 let _isRollAnimating           = false;
+let _isHandlingRoll            = false;
 
 // ─── Boot ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -486,36 +487,40 @@ async function _playPreRollDiceAnimation() {
 }
 
 async function handleRoll() {
-  if (!game || game.phase !== 'rolling' || _isRollAnimating) return;
+  if (!game || game.phase !== 'rolling' || _isRollAnimating || _isHandlingRoll) return;
+  _isHandlingRoll = true;
+  try {
+    // Online: only the current player may roll.
+    if (network.isOnline && game.currentPlayer !== network.localPlayerIndex) return;
 
-  // Online: only the current player may roll.
-  if (network.isOnline && game.currentPlayer !== network.localPlayerIndex) return;
+    await _playPreRollDiceAnimation();
+    if (!game || game.phase !== 'rolling') return;
 
-  await _playPreRollDiceAnimation();
-  if (!game || game.phase !== 'rolling') return;
+    const result = game.rollDice();
+    if (!result) return;
+    _resetResignTimer();
 
-  const result = game.rollDice();
-  if (!result) return;
-  _resetResignTimer();
+    // Auto-highlight bar if player must enter from it
+    if (!result.forfeit && game.phase === 'moving' && game.mustEnterFromBar()) {
+      game.selectedPoint = 'bar';
+      game.validMoves    = game.getValidMoves('bar');
+    }
 
-  // Auto-highlight bar if player must enter from it
-  if (!result.forfeit && game.phase === 'moving' && game.mustEnterFromBar()) {
-    game.selectedPoint = 'bar';
-    game.validMoves    = game.getValidMoves('bar');
+    hasRolledOnce = true;
+    refreshUI();
+
+    if (result.forfeit) {
+      ui.setRollButtonState(false, 'No moves!');
+      setTimeout(refreshUI, FORFEIT_MESSAGE_DELAY_MS);
+    }
+
+    // Unigammon tutorial hints
+    if (game.mode === 'unigammon') showTutorialHint();
+
+    _broadcastState();
+  } finally {
+    _isHandlingRoll = false;
   }
-
-  hasRolledOnce = true;
-  refreshUI();
-
-  if (result.forfeit) {
-    ui.setRollButtonState(false, 'No moves!');
-    setTimeout(refreshUI, FORFEIT_MESSAGE_DELAY_MS);
-  }
-
-  // Unigammon tutorial hints
-  if (game.mode === 'unigammon') showTutorialHint();
-
-  _broadcastState();
 }
 
 // ─── Canvas click ─────────────────────────────────────────────────────────────
