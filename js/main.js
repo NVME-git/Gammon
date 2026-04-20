@@ -458,10 +458,7 @@ function _randomDieValue() {
 }
 
 function _getPreviewDicePair() {
-  const d1 = _randomDieValue();
-  let d2 = _randomDieValue();
-  if (d2 === d1) d2 = (d2 % 6) + 1;
-  return [d1, d2];
+  return [_randomDieValue(), _randomDieValue()];
 }
 
 function _sleep(ms) {
