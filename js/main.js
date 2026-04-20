@@ -21,6 +21,10 @@ let _resignCheckInterval = null;
 
 // Named delay constant for the "no moves" forfeit message
 const FORFEIT_MESSAGE_DELAY_MS = 800;
+const DICE_PRE_ROLL_MS         = 260;
+const DICE_PRE_ROLL_STEP_MS    = 55;
+let _isRollAnimating           = false;
+let _isHandlingRoll            = false;
 
 // ─── Boot ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -450,34 +454,73 @@ function handleUndo() {
 }
 
 // ─── Roll dice ────────────────────────────────────────────────────────────────
-function handleRoll() {
-  if (!game || game.phase !== 'rolling') return;
+function _randomDieValue() {
+  return Math.ceil(Math.random() * 6);
+}
 
-  // Online: only the current player may roll.
-  if (network.isOnline && game.currentPlayer !== network.localPlayerIndex) return;
+function _generatePreviewDice() {
+  return [_randomDieValue(), _randomDieValue()];
+}
 
-  const result = game.rollDice();
-  if (!result) return;
-  _resetResignTimer();
+function _sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-  // Auto-highlight bar if player must enter from it
-  if (!result.forfeit && game.phase === 'moving' && game.mustEnterFromBar()) {
-    game.selectedPoint = 'bar';
-    game.validMoves    = game.getValidMoves('bar');
+async function _playPreRollDiceAnimation() {
+  _isRollAnimating = true;
+
+  try {
+    if (!renderer) return;
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < DICE_PRE_ROLL_MS) {
+      renderer.previewDice = _generatePreviewDice();
+      renderer.render();
+      await _sleep(DICE_PRE_ROLL_STEP_MS);
+    }
+  } finally {
+    if (renderer) {
+      renderer.previewDice = null;
+      renderer.render();
+    }
+    _isRollAnimating = false;
   }
+}
 
-  hasRolledOnce = true;
-  refreshUI();
+async function handleRoll() {
+  if (!game || game.phase !== 'rolling' || _isRollAnimating || _isHandlingRoll) return;
+  _isHandlingRoll = true;
+  try {
+    // Online: only the current player may roll.
+    if (network.isOnline && game.currentPlayer !== network.localPlayerIndex) return;
 
-  if (result.forfeit) {
-    ui.setRollButtonState(false, 'No moves!');
-    setTimeout(refreshUI, FORFEIT_MESSAGE_DELAY_MS);
+    await _playPreRollDiceAnimation();
+    if (!game || game.phase !== 'rolling') return;
+
+    const result = game.rollDice();
+    if (!result) return;
+    _resetResignTimer();
+
+    // Auto-highlight bar if player must enter from it
+    if (!result.forfeit && game.phase === 'moving' && game.mustEnterFromBar()) {
+      game.selectedPoint = 'bar';
+      game.validMoves    = game.getValidMoves('bar');
+    }
+
+    hasRolledOnce = true;
+    refreshUI();
+
+    if (result.forfeit) {
+      ui.setRollButtonState(false, 'No moves!');
+      setTimeout(refreshUI, FORFEIT_MESSAGE_DELAY_MS);
+    }
+
+    // Unigammon tutorial hints
+    if (game.mode === 'unigammon') showTutorialHint();
+
+    _broadcastState();
+  } finally {
+    _isHandlingRoll = false;
   }
-
-  // Unigammon tutorial hints
-  if (game.mode === 'unigammon') showTutorialHint();
-
-  _broadcastState();
 }
 
 // ─── Canvas click ─────────────────────────────────────────────────────────────

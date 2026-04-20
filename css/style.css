@@ -178,6 +178,13 @@ body {
   margin-top: -28px;
 }
 
+.play-recommendation {
+  font-size: 0.82rem;
+  color: #FFDD00;
+  text-align: center;
+  margin-top: -26px;
+}
+
 /* Section */
 .setup-section {
   width: 100%;

@@ -105,7 +105,7 @@ export class PixelArt {
     defCanvas.width  = 64 * dpr; defCanvas.height = 64 * dpr;
     PixelArt.drawCharacter(defCanvas, defenderColor);
 
-    const TOTAL = 24;  // ~400ms at 60fps
+    const TOTAL = 48;  // ~800ms at 60fps
     let frame     = 0;
     let cancelled = false;
 
