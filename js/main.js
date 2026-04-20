@@ -21,6 +21,9 @@ let _resignCheckInterval = null;
 
 // Named delay constant for the "no moves" forfeit message
 const FORFEIT_MESSAGE_DELAY_MS = 800;
+const DICE_PRE_ROLL_MS         = 260;
+const DICE_PRE_ROLL_STEP_MS    = 55;
+let _isRollAnimating           = false;
 
 // ─── Boot ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -450,11 +453,49 @@ function handleUndo() {
 }
 
 // ─── Roll dice ────────────────────────────────────────────────────────────────
-function handleRoll() {
-  if (!game || game.phase !== 'rolling') return;
+function _randomDieFace() {
+  return Math.ceil(Math.random() * 6);
+}
+
+function _getPreviewDicePair() {
+  const d1 = _randomDieFace();
+  let d2 = _randomDieFace();
+  if (d2 === d1) d2 = (d2 % 6) + 1;
+  return [d1, d2];
+}
+
+function _sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function _playPreRollDiceAnimation() {
+  if (!renderer) return;
+  _isRollAnimating = true;
+
+  const startedAt = Date.now();
+  try {
+    while (Date.now() - startedAt < DICE_PRE_ROLL_MS) {
+      renderer.previewDice = _getPreviewDicePair();
+      renderer.render();
+      await _sleep(DICE_PRE_ROLL_STEP_MS);
+    }
+  } finally {
+    if (renderer) {
+      renderer.previewDice = null;
+      renderer.render();
+    }
+    _isRollAnimating = false;
+  }
+}
+
+async function handleRoll() {
+  if (!game || game.phase !== 'rolling' || _isRollAnimating) return;
 
   // Online: only the current player may roll.
   if (network.isOnline && game.currentPlayer !== network.localPlayerIndex) return;
+
+  await _playPreRollDiceAnimation();
+  if (!game || game.phase !== 'rolling') return;
 
   const result = game.rollDice();
   if (!result) return;

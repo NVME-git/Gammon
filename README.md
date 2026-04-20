@@ -144,4 +144,4 @@ js/
 
 ## Support
 
-If you enjoy Gammon, consider [buying me a coffee](https://buymeacoffee.com/nabeelvandayar)!
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/nabeelvandayar)

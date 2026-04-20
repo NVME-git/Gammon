@@ -29,6 +29,7 @@ export class BoardRenderer {
     this.isOnline       = false;
     this.pendingConfirm = false;
     this.pendingPlayer  = null;   // local player shown during pendingConfirm
+    this.previewDice    = null;   // short pre-roll visual dice animation
 
     // Hit-test regions (populated during render)
     this._pointAreas    = [];
@@ -144,7 +145,14 @@ export class BoardRenderer {
       pointPolygons: this._pointPolygons,
     };
 
-    const state = this.game.getState();
+    let state = this.game.getState();
+    if (Array.isArray(this.previewDice) && this.previewDice.length > 0) {
+      state = {
+        ...state,
+        dice: [...this.previewDice],
+        movesLeft: [...this.previewDice],
+      };
+    }
 
     const sn = this.showNumbers;
     const mt = this.myTurn;
