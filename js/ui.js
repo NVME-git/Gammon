@@ -1,6 +1,7 @@
 import { PLAYER_COLORS, MODE_INFO, DEFAULT_COLORS, THEME_COLORS } from './constants.js';
 import { generateFunnyName } from './names.js';
 import { PixelArt } from './pixelart.js';
+import { getTutorialPages, isTutorialDismissed, dismissTutorial, resetTutorialDismiss } from './tutorial.js';
 
 export class UIManager {
   constructor() {
@@ -39,6 +40,22 @@ export class UIManager {
     // Animation canvas
     this.$animCanvas   = document.getElementById('animation-canvas');
 
+    // Tutorial modal elements
+    this.$tutorialOverlay   = document.getElementById('tutorial-overlay');
+    this.$tutorialEmoji     = document.getElementById('tutorial-emoji');
+    this.$tutorialHeading   = document.getElementById('tutorial-heading');
+    this.$tutorialBody      = document.getElementById('tutorial-body');
+    this.$tutorialDots      = document.getElementById('tutorial-dots');
+    this.$tutorialPrevBtn   = document.getElementById('tutorial-prev-btn');
+    this.$tutorialNextBtn   = document.getElementById('tutorial-next-btn');
+    this.$tutorialCloseBtn  = document.getElementById('tutorial-close-btn');
+    this.$tutorialDismissChk= document.getElementById('tutorial-dismiss-check');
+
+    // Tutorial state
+    this._tutorialMode      = null;
+    this._tutorialPages     = [];
+    this._tutorialPageIndex = 0;
+
     this.selectedMode  = 'bigammon';
     this._settingsOpen = false;
 
@@ -47,6 +64,7 @@ export class UIManager {
 
     this._loadSettings();
     this._bindStaticEvents();
+    this._bindTutorialEvents();
     this._renderModeCards();
     this._renderPlayerSetup();
   }
@@ -325,8 +343,147 @@ export class UIManager {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Elimination animation
+  // Tutorial modal
   // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Open the tutorial modal for the given mode.
+   * playerIndex — the viewing player's 0-based index (personalises pathways page).
+   * playerNames — optional string array for player name substitution.
+   * force       — if true, opens even when the "don't show again" flag is set.
+   */
+  showTutorial(mode, playerIndex = 0, playerNames = null, force = false) {
+    if (!force && isTutorialDismissed(mode)) return;
+    if (!this.$tutorialOverlay) return;
+
+    this._tutorialMode      = mode;
+    this._tutorialPages     = getTutorialPages(mode, playerIndex, playerNames);
+    this._tutorialPageIndex = 0;
+
+    // Reflect existing dismiss state in the checkbox
+    if (this.$tutorialDismissChk) {
+      this.$tutorialDismissChk.checked = isTutorialDismissed(mode);
+    }
+
+    this._renderTutorialPage();
+    this.$tutorialOverlay.classList.remove('hidden');
+  }
+
+  hideTutorial() {
+    if (!this.$tutorialOverlay) return;
+    this.$tutorialOverlay.classList.add('hidden');
+  }
+
+  _renderTutorialPage() {
+    const pages = this._tutorialPages;
+    const idx   = this._tutorialPageIndex;
+    if (!pages.length) return;
+
+    const page = pages[idx];
+
+    if (this.$tutorialEmoji)   this.$tutorialEmoji.textContent   = page.emoji || '🎲';
+    if (this.$tutorialHeading) this.$tutorialHeading.textContent  = page.heading;
+    if (this.$tutorialBody)    this.$tutorialBody.textContent     = page.body;   // textContent — XSS-safe
+
+    // Scroll body back to top on page change
+    if (this.$tutorialBody) this.$tutorialBody.scrollTop = 0;
+
+    // Rebuild dots
+    if (this.$tutorialDots) {
+      this.$tutorialDots.replaceChildren();
+      pages.forEach((_, i) => {
+        const dot = document.createElement('button');
+        dot.className   = 'tutorial-dot' + (i === idx ? ' active' : '');
+        dot.setAttribute('aria-label', `Go to page ${i + 1}`);
+        dot.addEventListener('click', () => {
+          this._tutorialPageIndex = i;
+          this._renderTutorialPage();
+        });
+        this.$tutorialDots.appendChild(dot);
+      });
+    }
+
+    // Update nav buttons
+    if (this.$tutorialPrevBtn) this.$tutorialPrevBtn.disabled = idx === 0;
+    if (this.$tutorialNextBtn) {
+      const isLast = idx === pages.length - 1;
+      this.$tutorialNextBtn.textContent = isLast ? '✓ Done' : 'Next →';
+    }
+  }
+
+  _bindTutorialEvents() {
+    if (!this.$tutorialOverlay) return;
+
+    this.$tutorialCloseBtn?.addEventListener('click', () => this.hideTutorial());
+
+    this.$tutorialPrevBtn?.addEventListener('click', () => {
+      if (this._tutorialPageIndex > 0) {
+        this._tutorialPageIndex--;
+        this._renderTutorialPage();
+      }
+    });
+
+    this.$tutorialNextBtn?.addEventListener('click', () => {
+      if (this._tutorialPageIndex < this._tutorialPages.length - 1) {
+        this._tutorialPageIndex++;
+        this._renderTutorialPage();
+      } else {
+        this.hideTutorial();
+      }
+    });
+
+    this.$tutorialDismissChk?.addEventListener('change', e => {
+      if (this._tutorialMode) {
+        if (e.target.checked) {
+          dismissTutorial(this._tutorialMode);
+        } else {
+          resetTutorialDismiss(this._tutorialMode);
+        }
+      }
+    });
+
+    // Close on backdrop click (click outside card)
+    this.$tutorialOverlay.addEventListener('click', e => {
+      if (e.target === this.$tutorialOverlay) this.hideTutorial();
+    });
+
+    // Keyboard: Escape to close, arrow keys for navigation
+    document.addEventListener('keydown', e => {
+      if (this.$tutorialOverlay?.classList.contains('hidden')) return;
+      if (e.key === 'Escape') { this.hideTutorial(); }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        if (this._tutorialPageIndex < this._tutorialPages.length - 1) {
+          this._tutorialPageIndex++;
+          this._renderTutorialPage();
+        }
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        if (this._tutorialPageIndex > 0) {
+          this._tutorialPageIndex--;
+          this._renderTutorialPage();
+        }
+      }
+    });
+
+    // Mode-card help buttons
+    document.querySelectorAll('.mode-help-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation(); // prevent mode-card selection
+        const mode = btn.dataset.mode;
+        if (mode) this.showTutorial(mode, 0, null, true);
+      });
+    });
+
+    // Settings panel "How to Play" button
+    const howToPlayBtn = document.getElementById('how-to-play-btn');
+    howToPlayBtn?.addEventListener('click', () => {
+      // Close the settings panel first
+      this._settingsOpen = false;
+      this.$settingsPanel.classList.add('hidden');
+      // onHowToPlay callback lets main.js provide game context (current player)
+      this.onHowToPlay?.();
+    });
+  }
 
   playEliminationAnimation(attackerColor, defenderColor, done) {
     if (!this.animationsEnabled) { done && done(); return; }

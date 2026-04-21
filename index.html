@@ -51,6 +51,8 @@
         <option value="0">Off</option>
       </select>
     </label>
+    <div class="setting-divider"></div>
+    <button id="how-to-play-btn" class="btn btn-ghost setting-help-btn">📖 How to Play</button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════
@@ -69,6 +71,7 @@
         <div class="mode-cards">
 
           <div class="mode-card" data-mode="unigammon">
+            <button class="mode-help-btn" data-mode="unigammon" title="How to play Unigammon" aria-label="How to play Unigammon">?</button>
             <div class="mode-icon">👤</div>
             <h3>Unigammon</h3>
             <p>Tutorial – move all 15 pieces from left to right and bear them off!</p>
@@ -76,6 +79,7 @@
           </div>
 
           <div class="mode-card selected" data-mode="bigammon">
+            <button class="mode-help-btn" data-mode="bigammon" title="How to play Bigammon" aria-label="How to play Bigammon">?</button>
             <div class="mode-icon">⚔️</div>
             <h3>Bigammon</h3>
             <p>Classic 2-player backgammon on a linear board. No U-turn!</p>
@@ -83,6 +87,7 @@
           </div>
 
           <div class="mode-card" data-mode="trigammon">
+            <button class="mode-help-btn" data-mode="trigammon" title="How to play Trigammon" aria-label="How to play Trigammon">?</button>
             <div class="mode-icon">🔺</div>
             <h3>Trigammon</h3>
             <p>3 players battle it out on a triangular board. Move clockwise!</p>
@@ -90,6 +95,7 @@
           </div>
 
           <div class="mode-card" data-mode="quadgammon">
+            <button class="mode-help-btn" data-mode="quadgammon" title="How to play Quadgammon" aria-label="How to play Quadgammon">?</button>
             <div class="mode-icon">♦</div>
             <h3>Quadgammon</h3>
             <p>4-player diamond race. Bear off all pieces first — last one standing loses!</p>
@@ -97,6 +103,7 @@
           </div>
 
           <div class="mode-card" data-mode="battlegammon">
+            <button class="mode-help-btn" data-mode="battlegammon" title="How to play Battlegammon" aria-label="How to play Battlegammon">?</button>
             <div class="mode-icon">✚</div>
             <h3>Battlegammon</h3>
             <p>4-way mayhem on a cross-shaped board. Last one standing wins!</p>
@@ -244,6 +251,36 @@
     <div class="rotate-icon">📱</div>
     <p>Please rotate your device</p>
     <small>Gammon is designed for landscape mode</small>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       TUTORIAL MODAL OVERLAY
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="tutorial-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="tutorial-heading">
+    <div class="tutorial-card">
+      <button id="tutorial-close-btn" class="tutorial-close-btn" aria-label="Close tutorial">✕</button>
+
+      <div class="tutorial-header">
+        <span id="tutorial-emoji" class="tutorial-emoji" aria-hidden="true">🎲</span>
+        <h2 id="tutorial-heading" class="tutorial-heading">How to Play</h2>
+      </div>
+
+      <div id="tutorial-body" class="tutorial-body"></div>
+
+      <div class="tutorial-footer">
+        <div class="tutorial-dots" id="tutorial-dots" aria-label="Page indicator"></div>
+
+        <div class="tutorial-nav">
+          <button id="tutorial-prev-btn" class="btn btn-ghost tutorial-nav-btn" aria-label="Previous page">← Prev</button>
+          <button id="tutorial-next-btn" class="btn btn-primary tutorial-nav-btn" aria-label="Next page">Next →</button>
+        </div>
+
+        <label class="tutorial-dismiss-row">
+          <input type="checkbox" id="tutorial-dismiss-check">
+          <span>Don't show again for this game mode</span>
+        </label>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="js/main.js"></script>

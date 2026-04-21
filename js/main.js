@@ -46,6 +46,16 @@ document.addEventListener('DOMContentLoaded', () => {
   ui.onThemeChange  = () => { if (renderer) renderer.render(); };
   ui.onNumbersChange = () => { if (renderer) { renderer.showNumbers = ui.showNumbers; renderer.render(); } };
 
+  // "How to Play" from settings panel — show tutorial for current game (player-aware)
+  ui.onHowToPlay = () => {
+    if (game) {
+      const playerNames = game.players.map(p => p.name);
+      ui.showTutorial(game.mode, game.currentPlayer, playerNames, true);
+    } else {
+      ui.showTutorial(ui.selectedMode, 0, null, true);
+    }
+  };
+
   _initP2PUI();
 
   // Show continue button if a saved game exists
@@ -358,6 +368,10 @@ function startGame() {
 
   handleResize();
   refreshUI();
+
+  // Show tutorial on first play for this mode (skips if player dismissed it)
+  const playerNames = players.map(p => p.name);
+  ui.showTutorial(mode, 0, playerNames);
 
   // Online: assign each connected guest a seat and send the initial state.
   if (network.isOnline && network.isHost) {
